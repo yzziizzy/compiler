@@ -1,0 +1,18 @@
+
+
+wsc = " " | "\n" | "\t" | "\r" ;
+ws = {wsc} ;
+
+
+type = "u32" | "i32" ;
+
+arg = type, ws, var-name ;
+arg-list = [ws], (arg | {arg, [ws], ","}, [ws], arg), [ws] ;
+
+exp = "expression" ;
+
+exp-list = {[ws], exp, [ws]} ;
+
+function = "function", ws, fn-name, [ws], "(", arg-list, ")", [ws], "{",  exp-list, "}" ;
+
+
