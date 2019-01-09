@@ -5,6 +5,7 @@
 
 
 #include "bnf.h"
+#include "re.h"
 
 
 
@@ -14,6 +15,11 @@ char* readFile(char* path, size_t* len);
 
 
 int main(int argc, char* argv) {
+	
+	re_parse("ab|cd?e*f+|g");
+// 	re_parse("ab|cd?e*f+|g|hij");
+	
+	return 0;
 	
 	char* content = readFile("./test.bnf", NULL);
 	

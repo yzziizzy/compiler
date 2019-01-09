@@ -25,7 +25,7 @@ enum lex_token_type {
 	LTT_RULE, // <string>
 };
 
-char token_precedence[] = {
+static char token_precedence[] = {
 	[LTT_NONE] = 0, // 0 means not an operator 
 	[LTT_DEF] = 0, 
 	[LTT_TERM] = 0, 
@@ -41,7 +41,7 @@ char token_precedence[] = {
 	[LTT_RULE] = 0, 
 };
 
-char* token_names[] = {
+static char* token_names[] = {
 	[LTT_NONE] = "LTT_NONE",   
 	[LTT_DEF] = "LTT_DEF",  
 	[LTT_TERM] = "LTT_TERM",  
@@ -228,11 +228,11 @@ static void lex_run(bnf_lex_ctx* lctx) {
 static bnf_lex_token* next_token(parse_ctx* ctx) {
 	if(ctx->cur_token >= VEC_LEN(&ctx->tokens)) return NULL;
 	bnf_lex_token* t = &VEC_ITEM(&ctx->tokens, ctx->cur_token); 
-	printf("\ngrabbed token: %s ", token_names[t->type]);
-	if(t->type == LTT_RULE || t->type == LTT_STR) {
-		printf("'%s'", t->str);
-	}
-	printf("\n");
+// 	printf("\ngrabbed token: %s ", token_names[t->type]);
+// 	if(t->type == LTT_RULE || t->type == LTT_STR) {
+// 		printf("'%s'", t->str);
+// 	}
+// 	printf("\n");
 	ctx->cur_token++;
 	return t;
 }
@@ -250,7 +250,7 @@ static bnf_lex_token* pop_op(parse_ctx* ctx) {
 	bnf_lex_token* t = 0;
 	if(VEC_LEN(&ctx->op_stack) == 0) return NULL;
 	VEC_POP(&ctx->op_stack, t);
-	printf("popping op %p\n", t);
+// 	printf("popping op %p\n", t);
 	return t;
 }
 static void push_val(parse_ctx* ctx, bnf_exp* t) {
@@ -273,16 +273,16 @@ static void run_op(parse_ctx* ctx, bnf_lex_token* t) {
 	
 	switch(t->type) {
 		case LTT_CAT:
-			print_val_stack(ctx, 4);
+// 			print_val_stack(ctx, 4);
 			
 			e1 = pop_val(ctx);
 			e0 = pop_val(ctx);
-			print_val_stack(ctx, 5);
+// 			print_val_stack(ctx, 5);
 			// add the next item into the previous CAT
 			if(e1->type == BNF_EXP_CAT) {
 				VEC_PREPEND(&e1->kids, e0);
 				push_val(ctx, e1);
-				print_val_stack(ctx, 6);
+// 				print_val_stack(ctx, 6);
 				return;
 			}
 			
@@ -290,7 +290,7 @@ static void run_op(parse_ctx* ctx, bnf_lex_token* t) {
 			VEC_PUSH(&en->kids, e0);
 			VEC_PUSH(&en->kids, e1);
 			push_val(ctx, en);
-			print_val_stack(ctx, 7);
+// 			print_val_stack(ctx, 7);
 			return;
 		case LTT_ALT:
 			e1 = pop_val(ctx);
@@ -319,7 +319,7 @@ static void run_op(parse_ctx* ctx, bnf_lex_token* t) {
 		case LTT_OPT_CL:
 			
 			while((t2 = pop_op(ctx)) && (t2->type != LTT_OPT_OP)) {
-				printf("> %p\n", t2);
+// 				printf("> %p\n", t2);
 				run_op(ctx, t2);
 			}
 			
@@ -335,7 +335,7 @@ static void run_op(parse_ctx* ctx, bnf_lex_token* t) {
 		case LTT_REP_CL:
 			
 			while((t2 = pop_op(ctx)) && (t2->type != LTT_REP_OP)) {
-				printf("> %p\n", t2);
+// 				printf("> %p\n", t2);
 				run_op(ctx, t2);
 			}
 			
@@ -350,7 +350,7 @@ static void run_op(parse_ctx* ctx, bnf_lex_token* t) {
 			
 		case LTT_GRP_CL:
 			while((t2 = pop_op(ctx)) && (t2->type != LTT_GRP_OP)) {
-				printf("> %p\n", t2);
+// 				printf("> %p\n", t2);
 				run_op(ctx, t2);
 			}
 			
@@ -387,8 +387,8 @@ static void parse_rule(parse_ctx* ctx) {
 	int top_prec = 0;
 	bnf_lex_token* t2;
 	while(1) {
-			print_val_stack(ctx, 2);
-			print_op_stack(ctx, 2);
+// 			print_val_stack(ctx, 2);
+// 			print_op_stack(ctx, 2);
 		
 		t = next_token(ctx);
 		if(t == NULL) {
@@ -410,7 +410,7 @@ static void parse_rule(parse_ctx* ctx) {
 		}
 		
 		if(prec < 1) { // push val
-			printf("pushing value\n");
+// 			printf("pushing value\n");
 			bnf_exp* en;
 			switch(t->type) {
 				case LTT_STR:
@@ -440,9 +440,9 @@ static void parse_rule(parse_ctx* ctx) {
 			else {
 				top_prec = 0;
 			}
-				printf("prec: t: %d, top: %d \n", prec, top_prec);
+// 				printf("prec: t: %d, top: %d \n", prec, top_prec);
 			if(top_prec > prec) {
-				printf("running op \n");
+// 				printf("running op \n");
 				t2 = pop_op(ctx);
 				run_op(ctx, t2);
 				continue;
@@ -458,7 +458,7 @@ static void parse_rule(parse_ctx* ctx) {
 	print_op_stack(ctx, 2);
 	// pop off the entire remaining op stack
 	while(t2 = pop_op(ctx)) {
-		printf("%d\n", t2->type);
+// 		printf("%d\n", t2->type);
 		run_op(ctx, t2);
 	
 		print_val_stack(ctx, 2);
@@ -522,7 +522,7 @@ void print_exp(bnf_exp* e, int indent) {
 // External API
 //
 
-void bnf_parse(char* source) {
+bnf_ruleset* bnf_parse(char* source) {
 	parse_ctx ctx;
 	bnf_lex_ctx lctx;
 	
@@ -549,16 +549,21 @@ void bnf_parse(char* source) {
 		parse_rule(&ctx);
 	}
 	
+// 	VEC_EACH(&ctx.rules, ri, r) {
+// 		printf("> %s", r->name);
+// 		print_exp(r->def, 0);
+// 	}
 	
+	VEC_FREE(&ctx.tokens);
+	VEC_FREE(&ctx.val_stack);
+	VEC_FREE(&ctx.op_stack);
 	
-	VEC_EACH(&ctx.rules, ri, r) {
-		printf("> %s", r->name);
-		print_exp(r->def, 0);
-	}
+	bnf_ruleset* rs = calloc(1, sizeof(*rs));
+	rs->rules.data = ctx.rules.data;
+	rs->rules.alloc = ctx.rules.alloc;
+	rs->rules.len = ctx.rules.len;
 	
-	
-	
-	//VEC_FREE(&ctx.tokens);
+	return rs;
 }
 
 

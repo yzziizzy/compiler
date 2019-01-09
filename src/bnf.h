@@ -36,10 +36,13 @@ typedef struct bnf_rule {
 	char is_terminal;
 } bnf_rule;
 
+typedef struct bnf_ruleset {
+	VEC(bnf_rule*) rules;
+	
+} bnf_ruleset;
 
 
-
-void bnf_parse(char* source);
+bnf_ruleset* bnf_parse(char* source);
 
 
 
