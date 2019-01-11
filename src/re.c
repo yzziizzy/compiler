@@ -54,7 +54,7 @@ static int is_in_out_list(nfa_frag* f, nfa_state** st) {
 
 static void print_frag_state(nfa_frag* f, nfa_state* st, int indent) {
 	int term = is_in_out_list(f, &st);
-	if(indent > 20) return;
+	if(indent > 5) return;
 	if(term) {
 		printf("%*sTERM\n", indent, " ");
 		return;
@@ -268,6 +268,7 @@ static char token_arity[] = {
 	[TOK_GRP_CL] = 0,
 };
 
+
 typedef struct {
 	char* s;
 	
@@ -281,11 +282,13 @@ typedef struct {
 
 
 static void print_op_stack(re_parse_state* ps, int indent) {
+	printf("-op stack- (%d)\n", (int)VEC_LEN(&ps->op_stack));
 	VEC_EACH(&ps->op_stack, pi, p) {
 		printf("%*s%s\n", indent, " ", token_names[p]);
 	}
 }
 static void print_val_stack(re_parse_state* ps, int indent) {
+	printf("-val stack- (%d)\n", (int)VEC_LEN(&ps->val_stack));
 	VEC_EACH(&ps->val_stack, pi, p) {
 		print_frag(p, indent);
 	}
@@ -303,7 +306,7 @@ static int classify_token(int c) {
 		case '(': return TOK_GRP_OP;  
 		case ')': return TOK_GRP_CL;  
 		default:
-			return TOKEN_NONE;
+			return TOK_NONE;
 	}
 } 
 
@@ -319,10 +322,25 @@ static int peek_char(char* s) {
 
 // returns 0 when done
 static int next_token(re_parse_state* ls) {
+	
+	int nc = peek_char(ls->s);
+	int nt = classify_token(nc);
+	
+	if(nc == 0) return 0;
+	
+	if(token_arity[ls->token] != 2) { 
+		if(token_arity[nt] < 1) { 
+			// output an auto cat
+			ls->token = TOK_CAT_AUTO;
+			
+			return 1;
+		}
+		
+	}
+	
 	int c = ls->s[0];
 	ls->s++;
 	
-	if(c == 0) return 0;
 	
 	if(c == '\\') {
 		c = ls->s[0];
@@ -356,6 +374,7 @@ static int pop_op(re_parse_state* ps) {
 }
 
 static void push_op(re_parse_state* ps, int t) {
+	printf("pushing %s onto op stack \n", token_names[t]);
 	VEC_PUSH(&ps->op_stack, t);
 }
 
@@ -369,19 +388,18 @@ static void run_op(re_parse_state* ps, int op) {
 	nfa_frag* f1 = NULL;
 	nfa_frag* f0 = NULL;
 	nfa_frag* fn = NULL;
-	printf("running op: %d\n", op);
+	printf("running op: %s\n", token_names[op]);
+	print_op_stack(ps, 1);
+	print_val_stack(ps, 1);
+	
+	
 	switch(op) {
 		case TOK_CAT:
 		case TOK_CAT_AUTO:
 			f1 = pop_val(ps);
 			f0 = pop_val(ps);
-			if(f0) { // hack that still doesn't work
-				fn = frag_cat(f0, f1);
-				push_val(ps, fn);
-			}
-			else {
-				push_val(ps, f1);
-			}
+			fn = frag_cat(f0, f1);
+			push_val(ps, fn);
 			break;
 		case TOK_ALT:
 			f1 = pop_val(ps);
@@ -389,23 +407,20 @@ static void run_op(re_parse_state* ps, int op) {
 			fn = frag_alt(f0, f1);
 			push_val(ps, fn);
 			break;
-		case TOK_OPT: // very hacky
+		case TOK_OPT: 
 			f0 = pop_val(ps);
 			fn = frag_opt(f0);
 			push_val(ps, fn);
-			push_op(ps, TOK_CAT);
 			break;
-		case TOK_STAR: // very hacky
+		case TOK_STAR: 
 			f0 = pop_val(ps);
 			fn = frag_star(f0);
 			push_val(ps, fn);
-			push_op(ps, TOK_CAT);
 			break;
-		case TOK_PLUS: // very hacky
+		case TOK_PLUS: 
 			f0 = pop_val(ps);
 			fn = frag_plus(f0);
 			push_val(ps, fn);
-			push_op(ps, TOK_CAT);
 			break;
 	}
 }
@@ -414,11 +429,21 @@ static void run_op(re_parse_state* ps, int op) {
 // DFA Conversion
 //
 
-typedef struct nfa_state_set {
+
+typedef struct dfa_edge {
+	int c;
+	struct dfa_state* out;
+} dfa_edge;
+
+typedef struct dfa_state {
 	VEC(nfa_state*) set;
 	VEC(int) out_chars;
 	char final;
-} nfa_state_set;
+	
+	VEC(dfa_edge) edges;
+} dfa_state;
+
+typedef dfa_state nfa_state_set;
 
 
 static nfa_state_set* new_nfa_state_set() {
@@ -434,6 +459,7 @@ static void push_nfa_set(nfa_state_set* set, nfa_state* st) {
 	VEC_PUSH(&set->set, st);
 	for(int i = 0; i < 2; i++) {
 		if(st->out[i] == NULL) continue;
+		if(st->out[i]->c == NFA_SPLIT) continue; 
 		VEC_EACH(&set->out_chars, ci, c) {
 			if(st->out[i]->c == c) goto CONTINUE;
 		}
@@ -494,39 +520,86 @@ static void print_nfa_set(nfa_state_set* set, int indent) {
 	}
 }
 
+
+
+
+
+
 static void nfa_to_dfa(nfa_state* nstart) {
 	
-	VEC(nfa_state_set*) dfa_sets;
-	VEC_INIT(&dfa_sets);
+	VEC(nfa_state_set*) dfa_states;
+	VEC_INIT(&dfa_states);
+	
 	
 	nfa_state_set* start_set = new_nfa_state_set();
 	nfa_set_e_closure(start_set, nstart);
-	VEC_PUSH(&dfa_sets, start_set);
+	VEC_PUSH(&dfa_states, start_set);
 	
-	VEC_EACH(&dfa_sets, dsi, ds) {
+	VEC_EACH(&dfa_states, dsi, ds) {
 		printf("\ndfa loop %d %p\n", dsi, ds);
 		print_nfa_set(ds, 2);
 		
 		VEC_EACH(&ds->out_chars, ci, c) {
-			printf("  dfa loop chars %d (%c)\n", ci, c);
+			printf("  dfa loop chars %d (%d, %c)\n", (int)ci, c, c);
 			
 			nfa_state_set* mset = nfa_move(ds, c);
 			nfa_set_e_closure(mset, NULL);
 			
 			if(VEC_LEN(&mset->set)) {
 				printf("    pushing set (%d)\n", (int)VEC_LEN(&mset->set));
-				VEC_PUSH(&dfa_sets, mset);
+				VEC_PUSH(&dfa_states, mset);
 			}
 		}
 		
-		if(dsi > 4) break;
+		if(dsi > 10) break;
 	}
 	
+	printf("\n--constructing edges-----\n");
+	// construct the dfa_state edges
+	VEC_EACH(&dfa_states, dsi, ds) { // dfa_state*/nfa_state_set* ds
+		printf("dfa loop %d\n", (int)dsi);
+		// collect all the edges from all the nfa states
+		VEC_EACH(&ds->set, sti, st) { // nfa_state* st
+			printf("  nfa_state: %p\n", st);
+			for(int i = 0; i < 2; i++) {
+				dfa_state* ds_target = NULL;
+				
+				if(st->out[i] == NULL || st->out[i] == &terminal_state) continue;
+				
+				// find which dfa_state this state is in
+				VEC_EACH(&dfa_states, dsi2, ds2) {
+					VEC_EACH(&ds2->set, sti2, st2) { // nfa_state* st
+						if(st->out[i] == st2) {
+							ds_target = ds2;
+							goto FOUND;
+						}
+					}
+				}
+				
+				printf("   ERROR: nfa state not found %p\n", st->out[i]);
+				
+			FOUND:
+				// add the edge
+				VEC_PUSH(&ds->edges, ((dfa_edge){st->out[i]->c, ds_target}));
+			}
+		}
+		
+	}
+	
+	
+	printf("dfa size: %d\n", (int)VEC_LEN(&dfa_states));
+	
+	
+	// minimization
+	
+// 	VEC(dfa) final_dfas;
+// 	VEC(dfa) nonfinal_dfas;
+// 	VEC_INIT(&final_dfas);
+// 	VEC_INIT(&nonfinal_dfas);
+	
+	
+	
 }
-
-
-
-
 
 
 
@@ -544,7 +617,7 @@ void re_parse(char* source) {
 	
 	re_parse_state ps;
 	ps.s = source;
-	ps.token = TOK_NONE;
+	ps.token = TOK_CAT_AUTO;
 	ps.c = 0;
 	VEC_INIT(&ps.op_stack);
 	VEC_INIT(&ps.val_stack);
@@ -552,22 +625,24 @@ void re_parse(char* source) {
 	int op = 0;
 	
 	while(next_token(&ps)) {
-		printf("\n+++++++++++\ntoken: %d '%c'\n", ps.token, ps.c);
-		print_op_stack(&ps, 1);
+		
+// 		if(ps.token == TOK_NONE) printf(" token: %s '%c'\n", token_names[ps.token], ps.c);
+// 		else printf(" token: %s \n", token_names[ps.token]);
+// 		continue;
+		
+ 		printf("\n+++++++++++\ntoken: %d '%c'\n", ps.token, ps.c);
+ 		print_op_stack(&ps, 1);
 		
 		if(ps.token == TOK_NONE) {
 			printf("pushing char: %c\n", ps.c);
 			push_val(&ps, frag_char(ps.c));
 			
-			// bootstrap the first character
-			if(1 == VEC_LEN(&ps.val_stack)) {
-				printf("EARLY EXIT *******************\n");
-				continue;
-			}
-			
-			// default operation is CAT
-			op = 1;
-			ps.token = TOK_CAT_AUTO;
+// 			// bootstrap the first character
+// 			if(1 == VEC_LEN(&ps.val_stack)) {
+// 				printf("EARLY EXIT *******************\n");
+// 				continue;
+// 			}
+			continue;
 		}
 		
 		
@@ -588,11 +663,11 @@ void re_parse(char* source) {
 	
 	int t;
 	
-	t = pop_op(&ps);
-	if(t != TOK_CAT_AUTO) {
-		push_op(&ps, t);
-	}
-	
+// 	t = pop_op(&ps);
+// 	if(t != TOK_CAT_AUTO) {
+// 		push_op(&ps, t);
+// 	}
+// 	
 	printf("\n\ndone with loop\n");
 	printf("done %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
 	print_op_stack(&ps, 1);
@@ -604,7 +679,7 @@ void re_parse(char* source) {
 	
 	while(t = pop_op(&ps)) {
 		// an extra default cat operator is sometimes left on the bottom of the stack
-		if(t == TOK_CAT && VEC_LEN(&ps.val_stack) < 2) break;
+// 		if(t == TOK_CAT && VEC_LEN(&ps.val_stack) < 2) break;
 		
 		run_op(&ps, t);
 	}
@@ -612,6 +687,10 @@ void re_parse(char* source) {
 	
 	printf("*******************\n");
 	
+	if(VEC_LEN(&ps.val_stack) > 1) {
+			printf("extra values left on stack\n");
+			*((int*)0) = 1;
+	}
 	
 	nfa_frag* f = VEC_HEAD(&ps.val_stack);
 	
