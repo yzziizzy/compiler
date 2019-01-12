@@ -607,7 +607,7 @@ static void nfa_to_dfa(nfa_state* nstart) {
 
 
 
-
+static void nfa_to_table(nfa_state* start); 
 
 
 
@@ -699,11 +699,113 @@ void re_parse(char* source) {
 	
 	print_frag(f, 2);
 	
+	nfa_to_table(f->start);
+	
+	return;
 	
 	nfa_to_dfa(f->start);
 	
 }
 
 
+typedef struct nfa_table_edge {
+	int start;
+	int c;
+	int dest;
+	
+	char is_start;
+	char is_terminal;
+} nfa_table_edge;
+
+
+
+static void nfa_to_table(nfa_state* start) {
+	
+	
+	
+	
+	VEC(nfa_table_edge) table;
+	VEC(nfa_state*) lookup;
+	VEC_INIT(&table);
+	VEC_INIT(&lookup);
+	
+	// thanks, gcc
+	int find_state_index(nfa_state* state) {
+		VEC_EACH(&lookup, sti, st) {
+			if(st == state) return sti;
+		}
+		VEC_PUSH(&lookup, state);
+		return VEC_LEN(&lookup) - 1;
+	}
+	
+	// returns 1 if there was an insertion, 0 if the state is duplicate
+	int insert_edge(nfa_state* _start, int c, nfa_state* dest) {
+		int start_i = find_state_index(_start); 
+		int dest_i = find_state_index(dest); 
+		VEC_LOOP(&table, ei) {
+			nfa_table_edge* e = &VEC_ITEM(&table, ei);
+			if(e->start == start_i && e->dest == dest_i && e->c == c) return 0;
+		}
+		
+		VEC_PUSH(&table, ((nfa_table_edge){
+			start_i, c, dest_i,
+			dest == start,
+			dest == &terminal_state,
+		}));
+		return 1;
+	}
+	
+	
+	VEC(nfa_state*) visited;
+	VEC(nfa_state*) stack;
+	VEC_INIT(&visited);
+	VEC_INIT(&stack);
+	
+	int has_visited(nfa_state* st) {
+		VEC_EACH(&visited, vi, v) {
+			if(v == st) return 1;
+		}
+		return 0;
+	}
+	
+	
+	// the start state is implicit
+	// push it first
+	insert_edge(NULL, start->c, start);
+	VEC_PUSH(&stack, start);
+	VEC_PUSH(&lookup, &terminal_state);
+	
+	
+	
+	VEC_EACH(&stack, si, s) {
+		VEC_PUSH(&visited, s);
+		
+		for(int i = 0; i < 2; i++) {
+			if(!s->out[i]) continue;
+			insert_edge(s, s->out[i]->c, s->out[i]);
+			
+			if(!has_visited(s->out[i])) {
+				VEC_PUSH(&stack, s->out[i]);
+			}
+		}
+		
+		
+	}
+	
+	
+	VEC_LOOP(&table, ei) {
+		nfa_table_edge* e = &VEC_ITEM(&table, ei);
+		
+		if(e->c == NFA_SPLIT) {
+			printf(" %d\t|  -e-\t  |  %d ", e->start, e->dest);
+		}
+		else {
+			printf(" %d\t|  %c\t  |  %d ", e->start, e->c, e->dest);
+		}
+		
+		printf("\t\t%d %d\n", e->is_start, e->is_terminal);
+	}
+	
+}
 
 

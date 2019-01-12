@@ -17,8 +17,8 @@ char* readFile(char* path, size_t* len);
 int main(int argc, char* argv) {
 	
 // 	re_parse("ab|cd?e*f+|g");
-	re_parse("abc+");
-// 	re_parse("ab|cd?e*f+|g|hij");
+// 	re_parse("a*b");
+	re_parse("ab|cd?e*f+|g|hij");
 	
 	return 0;
 	
