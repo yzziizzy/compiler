@@ -715,6 +715,8 @@ typedef struct nfa_table_edge {
 	
 	char is_start;
 	char is_terminal;
+	
+	int dfa_state;
 } nfa_table_edge;
 
 
@@ -804,6 +806,233 @@ static void nfa_to_table(nfa_state* start) {
 		}
 		
 		printf("\t\t%d %d\n", e->is_start, e->is_terminal);
+	}
+	
+	printf("----------------------------------------------\n");
+	
+	
+	
+	// should be mroe like vec(struct { int ds, ns; })
+	
+	typedef struct dfa_edge {
+		int start;
+		int c;
+		int dest;
+	} dfa_edge;
+
+	typedef struct dfa_set {
+		int dfa_state;
+		int nfa_state;
+	} dfa_set;
+	
+	typedef struct dfa_state_info {
+		int state_num;
+		int renamed_to;
+		
+		VEC(int) nfa_states;
+	} dfa_state_info;
+	
+	int next_dfa_state = 0;
+	VEC(dfa_edge) dtable; 
+	VEC_INIT(&dtable);
+
+	VEC(dfa_set) dsets; 
+	VEC_INIT(&dsets);
+	
+	VEC(dfa_state_info*) dfainfo;
+	VEC_INIT(&dfainfo);
+	
+	
+	// returns the number of states added
+	int add_dfa_set_state(int _n, dfa_state_info* dst) {
+		printf("         pushing %d\n", _n);
+		VEC_EACH(&dst->nfa_states, ni, n) {
+			if(n == _n) return 0;
+		}
+		VEC_PUSH(&dst->nfa_states, _n);
+		return 1;
+	} 
+	
+	// walk all the epison edges and add them to the dfa table
+	int e_closure(int start_n, dfa_state_info* dst) {
+		if(!add_dfa_set_state(start_n, dst)) return 0;
+		int added = 1;
+		
+		VEC_LOOP(&table, ei) {
+			nfa_table_edge* e = &VEC_ITEM(&table, ei);
+			if(e->start != start_n) continue;
+			if(e->c != NFA_SPLIT) continue;
+			
+			added += e_closure(e->dest, dst);
+		}
+		
+		return added;
+	}
+	
+	// grow a dfa set for  certain character
+	// returns the number of edges added
+	int move(dfa_state_info* dst, int c, dfa_state_info* out) {
+		int added = 0;
+		
+		// only loop to the current end
+		int len = VEC_LEN(&dst->nfa_states);
+		
+		for(int i = 0; i < len; i++) {
+			int n_state = VEC_ITEM(&dst->nfa_states, i);
+			printf("     trying nfa_state %d\n", n_state);
+			
+			VEC_LOOP(&table, ei) {
+				nfa_table_edge* e = &VEC_ITEM(&table, ei);
+				if(e->start != n_state) continue;
+				if(e->c != c) continue;
+				// only edges from n_state--c-->
+				
+				printf("      found edge to %d\n", e->dest);
+				
+				// add the edge
+				add_dfa_set_state(e->dest, out);
+				added++;
+				
+				// e-close the edge
+				added += e_closure(e->dest , out);
+			}
+		}
+		
+		return added;
+	}
+	
+	
+	void add_dfa_edge(int dfa_start, int c) {
+		
+	}
+	
+	dfa_state_info* new_dfa_state() {
+		int n = VEC_LEN(&dfainfo);
+		dfa_state_info* s = calloc(1, sizeof(*s));
+		s->state_num = n;
+		
+		VEC_PUSH(&dfainfo, n);
+		return s;
+	}
+	
+	VEC(dfa_state_info*) dstack;
+	VEC_INIT(&dstack);
+	
+	// e-close the start state
+	dfa_state_info* one = new_dfa_state(); 
+	e_closure(0, one); // 0 is the start state
+	
+	VEC_PUSH(&dstack, one);
+	
+	typedef VEC(int) charset;
+	
+	charset chars;
+	VEC_INIT(&chars);
+	
+	void add_char(charset* set, int c) {
+		VEC_EACH(set, si, sc) {
+			if(c == sc) return;
+		}
+		VEC_PUSH(set, c);
+	}
+	
+	void add_all_chars(dfa_state_info* dst, charset* set) {
+		VEC_EACH(&dst->nfa_states, nsti, nst) { // each nfa state
+			VEC_LOOP(&table, ti) { // each edge of the state
+				nfa_table_edge* ne = &VEC_ITEM(&table, ti);
+				if(ne->start != nst) continue;
+				if(ne->c == NFA_SPLIT) continue; // only named edges
+				
+				add_char(set, ne->c);
+			}
+		}
+	}
+	
+	
+	printf("$$ starting dfa conversion $$\n");
+	// stack of new, unprocessed dfa states
+	// states are added after e-closure but before move
+	VEC_EACH(&dstack, dsi, ds) {
+// 		printf("-- %d %p\n", dsi, ds); 
+		// get a unique set of char edges in the dfa set
+		VEC_TRUNC(&chars);
+		add_all_chars(ds, &chars);
+	
+		printf("-- %d %p  (%d chars [", dsi, ds, (int)VEC_LEN(&chars)); 
+		VEC_EACH(&chars, ci, c) printf("%c {%d}, ", c, c);
+		printf("])\n");
+		
+		
+		// for each unique char
+		VEC_EACH(&chars, ci, c) {
+			printf("  char: %c\n", c);
+			
+			dfa_state_info* dst2 = new_dfa_state(); 
+			
+			// move also e-closes the states it adds
+			move(ds, c, dst2);
+			
+			if(VEC_LEN(&dst2->nfa_states)) {
+				printf("    %d new states\n", (int)VEC_LEN(&dst2->nfa_states));
+				VEC_PUSH(&dstack, dst2);
+			}
+			else { // the set is empty
+				printf("    no new states.\n"); 
+				VEC_FREE(&dst2->nfa_states);
+				free(dst2);
+			}
+			
+			// TODO: edges
+// 			add_dfa_edge(ds, c, dst2);
+		}
+	}
+	
+	
+	
+	// print
+	VEC_LOOP(&dtable, ei) {
+		dfa_edge* e = &VEC_ITEM(&dtable, ei);
+		
+		printf("%d\t  '%c' ", e->start, e->c);
+		printf("%d\t ", e->dest);
+		
+		printf("\n");
+		
+	}
+	printf("-dstack------------------\n");
+	VEC_LOOP(&dstack, ei) {
+		dfa_state_info* e = VEC_ITEM(&dstack, ei);
+		
+		printf("%d\t (%d states) ", e->state_num, (int)VEC_LEN(&e->nfa_states));
+		printf("%d\t ", e->renamed_to);
+		printf("\n");
+		
+		VEC_EACH(&e->nfa_states, nsi, ns) {
+			printf("         %d\n", ns);
+		}
+		
+
+		
+	}
+// 	printf("-dfainfo------------------\n");
+// 	VEC_LOOP(&dfainfo, ei) {
+// 		dfa_state_info* e = &VEC_ITEM(&dfainfo, ei);
+// 		
+// 		printf("%d\t (%d states) ", e->state_num, (int)VEC_LEN(&e->nfa_states));
+// 		printf("%d\t ", e->renamed_to);
+// 		
+// 		printf("\n");
+// 		
+// 	}
+	printf("-------------------\n");
+	VEC_LOOP(&dsets, ei) {
+		dfa_set* e = &VEC_ITEM(&dsets, ei);
+		
+		printf("%d ) ", e->dfa_state);
+		printf("%d\t ", e->nfa_state);
+		
+		printf("\n");
+		
 	}
 	
 }
