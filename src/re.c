@@ -951,6 +951,33 @@ static void nfa_to_table(nfa_state* start) {
 	}
 	
 	
+	int compare_dfa_state(dfa_state_info* a, dfa_state_info* b) {
+		if(a->state_num == b->state_num) return 0;
+		if(VEC_LEN(&a->nfa_states) != VEC_LEN(&b->nfa_states)) return 1;
+		
+		VEC_EACH(&a->nfa_states, ai, as) {
+			VEC_EACH(&b->nfa_states, bi, bs) {
+				if(as == bs) goto FOUND;
+			}
+			return 1;
+			
+		FOUND:
+			(void)0;
+		}
+		
+		return 0;
+	}
+	
+	dfa_state_info* dfa_state_exists(dfa_state_info* s) {
+		VEC_EACH(&dstack, dsi, ds) {
+			if(0 == compare_dfa_state(s, ds)) {
+				return ds;
+			}
+		}
+		return NULL;
+	}
+	
+	
 	printf("$$ starting dfa conversion $$\n");
 	// stack of new, unprocessed dfa states
 	// states are added after e-closure but before move
@@ -977,9 +1004,17 @@ static void nfa_to_table(nfa_state* start) {
 			
 			// TODO: only add unique states
 			if(VEC_LEN(&dst2->nfa_states)) {
-				printf("    %d new states\n", (int)VEC_LEN(&dst2->nfa_states));
-				VEC_PUSH(&dstack, dst2);
-				add_dfa_edge(ds->state_num, c, dst2->state_num);
+				dfa_state_info* dup;
+				if((dup = dfa_state_exists(dst2))) {
+					printf("     duplicate state\n");
+					
+					add_dfa_edge(ds->state_num, c, dup->state_num);
+				}
+				else {
+					printf("    %d new states\n", (int)VEC_LEN(&dst2->nfa_states));
+					VEC_PUSH(&dstack, dst2);
+					add_dfa_edge(ds->state_num, c, dst2->state_num);
+				}
 			}
 			else { // the set is empty
 				printf("    no new states.\n"); 
@@ -1042,7 +1077,7 @@ static void nfa_to_table(nfa_state* start) {
 	}
 	
 	
-	char* input = "abbbc";
+	char* input = "df";
 	int len = strlen(input);
 	
 	int curstate = 0;
