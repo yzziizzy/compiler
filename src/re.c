@@ -855,8 +855,9 @@ static void nfa_to_table(nfa_state* start) {
 	
 	// walk all the epison edges and add them to the dfa table
 	int e_closure(int start_n, dfa_state_info* dst) {
-		if(!add_dfa_set_state(start_n, dst)) return 0;
-		int added = 1;
+		printf("closing %d\n", start_n);
+		
+		int added = add_dfa_set_state(start_n, dst);
 		
 		VEC_LOOP(&table, ei) {
 			nfa_table_edge* e = &VEC_ITEM(&table, ei);
@@ -866,6 +867,7 @@ static void nfa_to_table(nfa_state* start) {
 			added += e_closure(e->dest, dst);
 		}
 		
+		printf("closed %d states\n", added);
 		return added;
 	}
 	
@@ -902,8 +904,8 @@ static void nfa_to_table(nfa_state* start) {
 	}
 	
 	
-	void add_dfa_edge(int dfa_start, int c) {
-		
+	void add_dfa_edge(int start, int c, int dest) {
+		VEC_PUSH(&dtable, ((dfa_edge){start, c, dest}));
 	}
 	
 	dfa_state_info* new_dfa_state() {
@@ -963,6 +965,7 @@ static void nfa_to_table(nfa_state* start) {
 		printf("])\n");
 		
 		
+		
 		// for each unique char
 		VEC_EACH(&chars, ci, c) {
 			printf("  char: %c\n", c);
@@ -972,18 +975,21 @@ static void nfa_to_table(nfa_state* start) {
 			// move also e-closes the states it adds
 			move(ds, c, dst2);
 			
+			// TODO: only add unique states
 			if(VEC_LEN(&dst2->nfa_states)) {
 				printf("    %d new states\n", (int)VEC_LEN(&dst2->nfa_states));
 				VEC_PUSH(&dstack, dst2);
+				add_dfa_edge(ds->state_num, c, dst2->state_num);
 			}
 			else { // the set is empty
 				printf("    no new states.\n"); 
 				VEC_FREE(&dst2->nfa_states);
 				free(dst2);
+				VEC_LEN(&dfainfo)--;
 			}
 			
 			// TODO: edges
-// 			add_dfa_edge(ds, c, dst2);
+// 			
 		}
 	}
 	
@@ -1034,6 +1040,38 @@ static void nfa_to_table(nfa_state* start) {
 		printf("\n");
 		
 	}
+	
+	
+	char* input = "abbbc";
+	int len = strlen(input);
+	
+	int curstate = 0;
+	int i = 0;
+	
+	for(; i < len; i++) {
+		char c = input[i];
+		printf("c: %c, i: %d\n", c, i);
+		
+		VEC_EACH(&dtable, dei, de) {
+			if(de.start != curstate) continue;
+			if(de.c != c) continue;
+			
+			curstate = de.dest;
+			printf(" matched %c, moving to %d\n", de.c, de.dest); 
+			goto NEXT;
+		}
+		
+		// failed;
+		printf("failed\n");
+		return;
+	
+	NEXT:
+		(void)0;
+		printf("next\n");
+	}
+	
+	printf("matched\n");
+	
 	
 }
 
