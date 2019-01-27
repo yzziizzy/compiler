@@ -6,6 +6,7 @@
 
 #include "bnf.h"
 #include "re.h"
+#include "lexer.h"
 
 
 
@@ -16,8 +17,12 @@ char* readFile(char* path, size_t* len);
 
 int main(int argc, char* argv) {
 	
+	lexer();
+	
+	return 0;
+	
 // 	re_parse("ab|cd?e*f+|g");
-	re_parse("abbbq?c|df");
+//	re_parse("abbbq?c|df");
 // 	re_parse("a|b|cd?e*f+|g|hij");
 	
 	return 0;

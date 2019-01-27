@@ -23,6 +23,7 @@ enum lex_token_type {
 	LTT_GRP_CL, // )
 	LTT_STR, // <quoted string>
 	LTT_RULE, // <string>
+	LTT_REGEX, // /slashed regex string/
 };
 
 static char token_precedence[] = {
@@ -39,6 +40,7 @@ static char token_precedence[] = {
 	[LTT_GRP_CL] = -2, 
 	[LTT_STR] = 0, 
 	[LTT_RULE] = 0, 
+	[LTT_REGEX] = 0, 
 };
 
 static char* token_names[] = {
@@ -55,6 +57,7 @@ static char* token_names[] = {
 	[LTT_GRP_CL] = "LTT_GRP_CL",  
 	[LTT_STR] = "LTT_STR",  
 	[LTT_RULE] = "LTT_RULE",  
+	[LTT_REGEX] = "LTT_REGEX",  
 };
 
 
@@ -176,6 +179,23 @@ static void lex_push_string(bnf_lex_ctx* lctx) {
 	lctx->s += l + 1;
 }
 
+static void lex_push_regex(bnf_lex_ctx* lctx) {
+	char qc = '/';
+	size_t l = 1;
+	
+	for(; lctx->s[l] > 0; l++) {
+		if(lctx->s[l] == qc && lctx->s[l-1] != '\\') break;
+	}
+	
+	// TODO: check EOF
+	
+	char* str = strndup(lctx->s + 1, l - 1);
+// 	printf("string: '%s'\n", str);
+	lex_push(lctx, LTT_REGEX, str);
+	
+	lctx->s += l + 1;
+}
+
 static void lex_push_rule(bnf_lex_ctx* lctx) {
 	char* ruleChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_";
 	
@@ -204,6 +224,9 @@ static void lex_get_token(bnf_lex_ctx* lctx) {
 		case '\'':
 		case '"':
 			lex_push_string(lctx);
+			break;
+		case '/':
+			lex_push_regex(lctx);
 			break;
 		default:
 			lex_push_rule(lctx);
@@ -416,6 +439,9 @@ static void parse_rule(parse_ctx* ctx) {
 				case LTT_STR:
 					en = new_exp(BNF_EXP_STR);
 					break;
+				case LTT_REGEX:
+					en = new_exp(BNF_EXP_REGEX);
+					break;
 				case LTT_RULE:
 					en = new_exp(BNF_EXP_RULE);
 					break;
@@ -454,15 +480,15 @@ static void parse_rule(parse_ctx* ctx) {
 		
 	}
 	
-	print_val_stack(ctx, 2);
-	print_op_stack(ctx, 2);
+// 	print_val_stack(ctx, 2);
+// 	print_op_stack(ctx, 2);
 	// pop off the entire remaining op stack
 	while(t2 = pop_op(ctx)) {
 // 		printf("%d\n", t2->type);
 		run_op(ctx, t2);
 	
-		print_val_stack(ctx, 2);
-		print_op_stack(ctx, 2);
+// 		print_val_stack(ctx, 2);
+// 		print_op_stack(ctx, 2);
 	}
 	
 	// should only have one value on the stack
@@ -478,6 +504,7 @@ static void parse_rule(parse_ctx* ctx) {
 char* bnf_exp_type_names[] = {
 	[BNF_EXP_RULE] = "RULE",
 	[BNF_EXP_STR] = "STR",
+	[BNF_EXP_REGEX] = "REGEX",
 	[BNF_EXP_CAT] = "CAT",
 	[BNF_EXP_ALT] = "ALT",
 	[BNF_EXP_REP] = "REP",
@@ -526,9 +553,9 @@ bnf_ruleset* bnf_parse(char* source) {
 	parse_ctx ctx;
 	bnf_lex_ctx lctx;
 	
-	
 	lctx.s = source;
 	lctx.current_line = 0;
+	lctx.current_char = 0;
 	lctx.error_msg = NULL;
 	lctx.finished = 0;
 	VEC_INIT(&lctx.tokens);

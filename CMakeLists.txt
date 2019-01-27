@@ -6,5 +6,7 @@ add_executable(compiler
 	src/main.c 
 	src/bnf.c
 	src/ds.c
+	src/lexer.c
 	src/re.c
+	src/rle.c
 )

@@ -4,7 +4,7 @@ wsc = " " | "\n" | "\t" | "\r" ;
 ws = {wsc} ;
 
 
-type = "u32" | "i32" ;
+type = "u32" | "i32" | "u8" | "u16" | "u64";
 
 arg = type, ws, var-name ;
 arg-list = [ws], (arg | {arg, [ws], ","}, [ws], arg), [ws] ;

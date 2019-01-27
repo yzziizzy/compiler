@@ -9,6 +9,7 @@
 enum bnf_exp_type {
 	BNF_EXP_RULE,
 	BNF_EXP_STR,
+	BNF_EXP_REGEX,
 	BNF_EXP_CAT,
 	BNF_EXP_ALT,
 	BNF_EXP_REP,
@@ -25,7 +26,7 @@ typedef struct bnf_exp {
 	union {
 		char* content;
 		struct bnf_exp* exp;
-	}
+	};
 } bnf_exp;
 
 typedef struct bnf_rule {
