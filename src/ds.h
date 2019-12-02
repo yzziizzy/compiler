@@ -302,10 +302,196 @@ void vec_resize_to(void** data, size_t* size, size_t elem_size, size_t new_size)
 
 
 
+/*********************************
+      Pointer Sets
+**********************************
+
+Built around sorted vectors
+
+*/
+
+typedef struct PointerSet {
+	void** set;
+	size_t length;
+	size_t alloc;
+} PointerSet;
 
 
+static void PS_print(PointerSet* ps) {
+	
+	printf("PointerSet %p (%ld items)\n", ps, ps->length);
+	for(int i = 0; i < ps->length; i++) {
+		printf(" %d: %p\n", i, ps->set[i]);
+	}
+}
 
 
+static size_t PS_find_index(PointerSet* ps, void* p) {
+	ptrdiff_t  R = ps->length - 1;
+	ptrdiff_t L = 0;
+	ptrdiff_t i;
+	
+	while(R - L > 0) {
+		
+		// midpoint
+		i = L + ((R - L) / 2);
+		if(ps->set[i] < p) {
+			L = i + 1;
+		}
+		else if(ps->set[i] > p) {
+			R = i - 1;
+		}
+		else {
+			return i;
+		}
+	}
+	
+	return (ps->set[L] < p) ? L + 1 : L;
+} 
+
+static void PS_insert(PointerSet* ps, void* p) {
+	
+	if(ps->length == 0) {
+		ps->alloc = 8;
+		ps->set = calloc(1, ps->alloc * sizeof(*ps->set));
+		
+		ps->set[0] = p;
+		ps->length++;
+		return;
+	}
+	else if(ps->length + 1 <= ps->alloc) {
+		ps->alloc *= 2;
+		ps->set = realloc(ps->set, ps->alloc * sizeof(*ps->set));
+	} 
+	
+	// find the slot
+	size_t i = PS_find_index(ps, p);
+	if(ps->set[i] == p) return;
+
+	memmove(ps->set + i + 1, ps->set + i, (ps->length - i) * sizeof(*ps->set));
+	ps->set[i] = p;
+	ps->length++;
+}
+
+static int PS_remove(PointerSet* ps, void* p) {
+	if(ps->length == 0) return 0;
+	
+	size_t i = PS_find_index(ps, p);
+	if(ps->set[i] != p) return 0;
+	
+	memmove(ps->set + i, ps->set + i + 1, (ps->length - i - 1) * sizeof(*ps->set));
+	ps->length--;
+	return 1;
+}
+
+static int PS_exists(PointerSet* ps, void* p) {
+	size_t i = PS_find_index(ps, p);
+	return (ps->set[i] == p);
+}
+
+static PointerSet* PS_alloc() {
+	PointerSet* ps = malloc(sizeof(ps));
+	ps->alloc = 0;
+	ps->length = 0;
+}
+
+static void PS_free(PointerSet* ps) {
+	free(ps->set);
+	free(ps);
+}
+
+static PointerSet* PS_intersect(PointerSet* a, PointerSet* b) {
+	PointerSet* c = malloc(sizeof(*c));
+	
+	c->alloc = a->length > b->length ? a->length : b->length;
+	c->set = malloc(c->alloc * sizeof(*c->set));
+	c->length = 0;
+	
+	size_t ci = 0;
+	size_t bi = 0;
+	size_t ai = 0;
+	while(ai < a->length && bi < b->length) {
+		void* ap = a->set[ai];
+		void* bp = b->set[bi];
+		if(ap == bp) {
+			c->set[ci] = a->set[ai];
+			c->length++;
+			ai++; bi++; ci++; 
+		}
+		else if(ap > bp) {
+			bi++;
+		}
+		else {
+			ai++;
+		}
+	}
+	
+	return c;
+}
+
+static PointerSet* PS_union(PointerSet* a, PointerSet* b) {
+	PointerSet* c = malloc(sizeof(*c));
+	
+	c->alloc = a->length + b->length;
+	c->set = malloc(c->alloc * sizeof(*c->set));
+	c->length = 0;
+	
+	size_t ci = 0;
+	size_t bi = 0;
+	size_t ai = 0;
+	while(ai < a->length || bi < b->length) {
+		void* ap = a->set[ai];
+		void* bp = b->set[bi];
+		if(ap == bp) {
+			c->set[ci] = a->set[ai];
+			c->length++;
+			ai++; bi++; ci++; 
+		}
+		else if(ap > bp) {
+			c->set[ci++] = b->set[bi];
+			c->length++;
+			bi++;
+		}
+		else {
+			c->set[ci++] = a->set[ai];
+			c->length++;
+			ai++;
+		}
+	}
+	
+	return c;
+}
+
+static PointerSet* PS_difference(PointerSet* a, PointerSet* b) {
+	PointerSet* c = malloc(sizeof(*c));
+	
+	c->alloc = a->length + b->length;
+	c->set = malloc(c->alloc * sizeof(*c->set));
+	c->length = 0;
+	
+	size_t ci = 0;
+	size_t bi = 0;
+	size_t ai = 0;
+	while(ai < a->length || bi < b->length) {
+		void* ap = a->set[ai];
+		void* bp = b->set[bi];
+		if(ap == bp) {
+			ai++; bi++; 
+		}
+		else if(ap > bp) {
+			c->set[ci++] = b->set[bi];
+			c->length++;
+			bi++;
+		}
+		else {
+			c->set[ci++] = a->set[ai];
+			c->length++;
+			ai++;
+		}
+	}
+	
+	return c;
+}
 
 /*********************************
       Linked Lists
