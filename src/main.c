@@ -18,7 +18,7 @@ char* readFile(char* path, size_t* len);
 int main(int argc, char* argv) {
 	
 // 	lexer();
-	
+	/*
 	PointerSet* ps = calloc(1, sizeof(*ps));
 	PointerSet* ps2 = calloc(1, sizeof(*ps2));
 	
@@ -41,9 +41,13 @@ int main(int argc, char* argv) {
 	PointerSet_print(ps4);
 	PointerSet* ps5 = PointerSet_difference(ps, ps2);
 	PointerSet_print(ps5);
-	
+	PointerSet_union_inplace(ps5, ps3);
+	PointerSet_print(ps5);
+	*/
 // 	return 0;
-	re_nfa_from_string("ab|cd");
+	re_nfa n = re_nfa_from_string("ab|cd");
+	
+	re_compile_nfa_2(n);
 // 	re_parse("ab|cd");
 // 	re_parse("ab|cd?e*f+|g");
 //	re_parse("abbbq?c|df");

@@ -540,6 +540,165 @@ void re_tag(void* _f, int tag) {
 }
 
 
+nfa_state_set* new_nfa_state_set() {
+	nfa_state_set* n = calloc(1, sizeof(*n));
+	return n;
+}
+
+void nfa_state_set_free(nfa_state_set* s) {
+	PointerSet_destroy(&s->states);
+	charSet_destroy(&s->out_chars);
+}
+
+void nfa_state_set_union(nfa_state_set* a, nfa_state_set* b) {
+	PointerSet_union_inplace(&a->states, &b->states);
+	charSet_union_inplace(&a->out_chars, &b->out_chars);
+}
+
+
+
+nfa_state_set* nfa_state_e_closure(nfa_state* st) {
+	nfa_state_set* set = new_nfa_state_set();
+	
+	VEC(nfa_state*) stack;
+	VEC_INIT(&stack);
+	
+	VEC_PUSH(&stack, st);
+	
+	VEC_EACH(&stack, i, cur_st) {
+		// skip states already in the mess
+		if(PointerSet_exists(&set->states, cur_st)) continue;
+		
+		PointerSet_insert(&set->states, cur_st);
+		
+		for(int o = 0; o < 2; o++) {
+			if(cur_st->out[o] == NULL) continue;
+			
+			int oc = cur_st->out[o]->c;
+			
+			// save this set for later
+			if(oc != NFA_SPLIT) {
+				charSet_insert(&set->out_chars, oc);
+			}
+			
+			if(oc == NFA_SPLIT) {
+				VEC_PUSH(&stack, cur_st->out[o]);
+			}
+		}
+		
+	}
+	
+	VEC_FREE(&stack);
+	
+	return set;
+}
+
+nfa_state_set* nfa_state_move(nfa_state* st, int c) {
+	nfa_state_set* set = new_nfa_state_set();
+// 	set->c = c;
+
+	for(int o = 0; o < 2; o++) {
+		if(st->out[o] == NULL) continue;
+		
+		int oc = st->out[o]->c;
+		
+		// save this set for later
+		if(oc != NFA_SPLIT) {
+			charSet_insert(&set->out_chars, oc);
+		}
+		
+		if(oc == c) {
+			PointerSet_insert(&set->states, st->out[o]);
+		}
+	}
+	
+	return set;
+}
+
+
+
+nfa_state_set* nfa_state_set_move(nfa_state_set* set, int c) {
+	nfa_state_set* out = new_nfa_state_set();
+	
+	for(int i = 0; i < set->states.length; i++) {
+		nfa_state* cur_st = set->states.set[i];
+		
+		// BUG: broken
+		for(int o = 0; o < 2; o++) {
+			if(cur_st->out[o] == NULL) continue;
+			
+			nfa_state_set* x = nfa_state_move(cur_st, c);
+			nfa_state_set_union(out, x);
+			
+			nfa_state_set_free(x);
+		}
+	}
+	
+	return out;
+}
+
+void nfa_state_set_e_closure(nfa_state_set* set) {
+	nfa_state_set* out = new_nfa_state_set();
+	
+	for(int i = 0; i < set->states.length; i++) {
+		nfa_state* cur_st = set->states.set[i];
+		
+		for(int o = 0; o < 2; o++) {
+			if(cur_st->out[o] == NULL) continue;
+			
+			nfa_state_set* x = nfa_state_e_closure(cur_st);
+			nfa_state_set_union(out, x);
+			
+			nfa_state_set_free(x);
+		}
+	}
+	
+	nfa_state_set_union(set, out);
+	nfa_state_set_free(out);
+}
+
+
+
+int nfa_state_set_cmp(nfa_state_set** a, nfa_state_set** b) {
+	if((*a)->states.length != (*b)->states.length) return (*a)->states.length != (*b)->states.length;
+	
+	return memcmp((*a)->states.set, (*b)->states.set, (*a)->states.length * sizeof(*(*a)->states.set));
+}
+
+
+void re_compile_nfa_2(re_nfa _n) {
+	nfa_state* start = ((nfa_frag*)_n)->start;
+	
+	StructSet dfa_states;
+	StructSet_init(&dfa_states, nfa_state_set*, nfa_state_set_cmp);
+	
+	nfa_state_set* nss_start = nfa_state_e_closure(start);
+	
+	VEC(nfa_state_set*) stack;
+	VEC_INIT(&stack);
+	
+	VEC_PUSH(&stack, nss_start);
+	
+	VEC_EACH(&stack, z, s) {
+		printf("n\n");
+		for(int i = 0; i < s->out_chars.length; i++) {
+			int c = s->out_chars.set[i];
+			
+			nfa_state_set* s2 = nfa_state_set_move(s, c);
+			nfa_state_set_e_closure(s2);
+			
+			if(!StructSet_insert(&dfa_states, s2)) {
+				// set is new
+				VEC_PUSH(&stack, s2);
+			}
+		}
+	}
+	
+	
+	
+	
+}
+/*
 
 // convert an nfa graph to a transition table
 re_table re_compile_nfa(re_nfa _n) {
@@ -626,31 +785,12 @@ re_table re_compile_nfa(re_nfa _n) {
 	}
 	
 	printf("----------------------------------------------\n");
-	*/
+	* /
 	
 	
 	
 	// create a dfa from the nfa state table
 	
-	typedef struct dfa_edge {
-		int start;
-		int c;
-		int dest;
-	} dfa_edge;
-
-	typedef struct dfa_set {
-		int dfa_state;
-		int nfa_state;
-	} dfa_set;
-	
-	typedef struct dfa_state_info {
-		int state_num;
-		int renamed_to;
-		
-		char is_terminal;
-		
-		VEC(int) nfa_states;
-	} dfa_state_info;
 	
 	int next_dfa_state = 0;
 	VEC(dfa_edge) dtable; 
@@ -959,7 +1099,7 @@ MATCHED:
 	}
 	*/
 	
-}
+// }
 
 
 

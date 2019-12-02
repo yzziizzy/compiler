@@ -330,10 +330,15 @@ PointerSet* PointerSet_alloc();
 void PointerSet_init(PointerSet* ps);
 void PointerSet_free(PointerSet* ps);
 void PointerSet_destroy(PointerSet* ps);
+int PointerSet_equal(PointerSet* a, PointerSet* b);
 PointerSet* PointerSet_intersect(PointerSet* a, PointerSet* b);
 PointerSet* PointerSet_union(PointerSet* a, PointerSet* b);
 PointerSet* PointerSet_difference(PointerSet* a, PointerSet* b);
 size_t PointerSet_find_index(PointerSet* ps, void* p);
+
+// adds b into a 
+void PointerSet_union_inplace(PointerSet* a, PointerSet* b);
+
 
 
 
@@ -360,12 +365,12 @@ do { \
 	(ss)->length = 0; \
 	(ss)->alloc = 0; \
 	(ss)->elem_size = sizeof(type); \
-	(ss)->cmp = (comp_fn); \
+	(ss)->cmp = (void*)(comp_fn); \
 } while(0)
 
 
 
-void StructSet_insert(StructSet* ss, void* p);
+int StructSet_insert(StructSet* ss, void* p);
 int StructSet_remove(StructSet* ss, void* p);
 int StructSet_exists(StructSet* ss, void* p);
 #define StructSet_alloc(e, c) StructSet_alloc_(sizeof(e), cmp)
@@ -405,6 +410,7 @@ size_t StructSet_find_index(StructSet* ss, void* p);
 	void type##Set_destroy(type##Set* ps); \
 	type##Set* type##Set_intersect(type##Set* a, type##Set* b); \
 	type##Set* type##Set_union(type##Set* a, type##Set* b); \
+	void type##Set_union_inplace(type##Set* a, type##Set* b); \
 	type##Set* type##Set_difference(type##Set* a, type##Set* b); \
 	size_t type##Set_find_index(type##Set* ps, type p);
 
@@ -576,6 +582,48 @@ type##Set* type##Set_union(type##Set* a, type##Set* b) { \
 	return c; \
 }
 
+#define DEFINE_SET_UNION_INPLACE(type) \
+void type##Set_union_inplace(type##Set* a, type##Set* b) { \
+	type##Set* c = malloc(sizeof(*c)); \
+	\
+	a->alloc = a->length + b->length; \
+	a->set = realloc(a->set, a->alloc * sizeof(*a->set)); \
+	\
+	size_t final_length = 0; \
+	ptrdiff_t bi = b->length - 1; \
+	ptrdiff_t ai = a->length - 1; \
+	ptrdiff_t wi = a->alloc - 1; \
+	while(ai >= 0 && bi >= 0) { \
+		type ap = a->set[ai]; \
+		type bp = b->set[bi]; \
+		if(ap == bp) { \
+			a->set[wi] = a->set[ai]; \
+			final_length++; \
+			ai--; bi--; wi--;  \
+		} \
+		else if(ap < bp) { \
+			a->set[wi--] = b->set[bi--]; \
+			final_length++; \
+		} \
+		else { \
+			a->set[wi--] = a->set[ai--]; \
+			final_length++; \
+		} \
+	}; \
+	 \
+	while(ai >= 0) { \
+		a->set[wi--] = a->set[ai--]; \
+		final_length++; \
+	} \
+	while(bi >= 0) { \
+		a->set[wi--] = b->set[bi--]; \
+		final_length++; \
+	} \
+	 \
+	memmove(a->set, a->set + a->alloc - final_length, final_length * sizeof(*a->set)); \
+	a->length = final_length; \
+}
+
 #define DEFINE_SET_DIFFERENCE(type) \
 type##Set* type##Set_difference(type##Set* a, type##Set* b) { \
 	type##Set* c = malloc(sizeof(*c)); \
@@ -611,6 +659,7 @@ type##Set* type##Set_difference(type##Set* a, type##Set* b) { \
 #define DEFINE_SET_FOR_TYPE(type, fmt) \
 	DEFINE_SET_DIFFERENCE(type) \
 	DEFINE_SET_UNION(type) \
+	DEFINE_SET_UNION_INPLACE(type) \
 	DEFINE_SET_INTERSECT(type) \
 	DEFINE_SET_ALLOC(type) \
 	DEFINE_SET_INIT(type) \

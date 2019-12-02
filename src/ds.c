@@ -142,6 +142,7 @@ int PointerSet_remove(PointerSet* ps, void* p) {
 }
 
 int PointerSet_exists(PointerSet* ps, void* p) {
+	if(ps->length == 0) return 0;
 	size_t i = PointerSet_find_index(ps, p);
 	return (ps->set[i] == p);
 }
@@ -167,6 +168,18 @@ void PointerSet_destroy(PointerSet* ps) {
 	ps->alloc = 0;
 	ps->length = 0;
 }
+
+
+int PointerSet_equal(PointerSet* a, PointerSet* b) {
+	if(a->length != b->length) return 0;
+	
+	for(size_t i = 0; i < a->length; i++) {
+		if(a->set[i] != b->set[i]) return 0;
+	}
+	
+	return 1;
+}
+
 
 PointerSet* PointerSet_intersect(PointerSet* a, PointerSet* b) {
 	PointerSet* c = malloc(sizeof(*c));
@@ -230,6 +243,49 @@ PointerSet* PointerSet_union(PointerSet* a, PointerSet* b) {
 	return c;
 }
 
+void PointerSet_union_inplace(PointerSet* a, PointerSet* b) {
+	
+	a->alloc = a->length + b->length;
+	a->set = realloc(a->set, a->alloc * sizeof(*a->set));
+	
+	// work backwards to fill in the data, then do one memmove
+	size_t final_length = 0;
+	ptrdiff_t bi = b->length - 1;
+	ptrdiff_t ai = a->length - 1;
+	ptrdiff_t wi = a->alloc - 1; // write index
+	while(ai >= 0 && bi >= 0) {
+		void* ap = a->set[ai];
+		void* bp = b->set[bi];
+		if(ap == bp) {
+			a->set[wi] = a->set[ai];
+			final_length++;
+			ai--; bi--; wi--; 
+		}
+		else if(ap < bp) {
+			a->set[wi--] = b->set[bi--];
+			final_length++;
+		}
+		else {
+			a->set[wi--] = a->set[ai--];
+			final_length++;
+		}
+	};
+	
+	// finish off any remainder
+	while(ai >= 0) {
+		a->set[wi--] = a->set[ai--];
+		final_length++;
+	}
+	while(bi >= 0) {
+		a->set[wi--] = b->set[bi--];
+		final_length++;
+	}
+	
+	// the unioned data is at the end of the allocation. move it to the front.
+	memmove(a->set, a->set + a->alloc - final_length, final_length * sizeof(*a->set));
+	a->length = final_length;
+}
+
 PointerSet* PointerSet_difference(PointerSet* a, PointerSet* b) {
 	PointerSet* c = malloc(sizeof(*c));
 	
@@ -282,7 +338,7 @@ size_t StructSet_find_index(StructSet* ss, void* p) {
 		
 		// midpoint
 		i = L + ((R - L) / 2);
-		int n = SS_EQ(ss, i, p);
+		int n = SS_EQ(ss, i, &p);
 		if(n < 1) {
 			L = i + 1;
 		}
@@ -294,18 +350,18 @@ size_t StructSet_find_index(StructSet* ss, void* p) {
 		}
 	}
 	
-	return (SS_EQ(ss, L, p) < 0) ? L + 1 : L;
+	return (SS_EQ(ss, L, &p) < 0) ? L + 1 : L;
 } 
 
-void StructSet_insert(StructSet* ss, void* p) {
+int StructSet_insert(StructSet* ss, void* p) {
 	
 	if(ss->length == 0) {
 		ss->alloc = 8;
 		ss->set = calloc(1, ss->alloc * ss->elem_size);
 		
-		SS_SET(ss, 0, p);
+		SS_SET(ss, 0, &p);
 		ss->length++;
-		return;
+		return 0;
 	}
 	else if(ss->length + 1 <= ss->alloc) {
 		ss->alloc *= 2;
@@ -314,22 +370,24 @@ void StructSet_insert(StructSet* ss, void* p) {
 	
 	// find the slot
 	size_t i = StructSet_find_index(ss, p);
-	if(SS_EQ(ss, i, p) == 0) return;
+	if(SS_EQ(ss, i, &p) == 0) return 1;
 
 	memmove(
 		ss->set + (i + 1) * ss->elem_size, 
 		ss->set + i * ss->elem_size, 
 		(ss->length - i) * ss->elem_size
 	);
-	SS_SET(ss, i, p);
+	SS_SET(ss, i, &p);
 	ss->length++;
+	
+	return 0;
 }
 
 int StructSet_remove(StructSet* ss, void* p) {
 	if(ss->length == 0) return 0;
 	
 	size_t i = StructSet_find_index(ss, p);
-	if(SS_EQ(ss, i, p) != 0) return 0;
+	if(SS_EQ(ss, i, &p) != 0) return 0;
 	
 	memmove(
 		ss->set + i * ss->elem_size, 
@@ -341,8 +399,9 @@ int StructSet_remove(StructSet* ss, void* p) {
 }
 
 int StructSet_exists(StructSet* ss, void* p) {
+	if(ss->length == 0) return 0;
 	size_t i = StructSet_find_index(ss, p);
-	return SS_EQ(ss, i, p) == 0;
+	return SS_EQ(ss, i, &p) == 0;
 }
 
 StructSet* StructSet_alloc_(size_t elem_size, SetCmpFn cmp) {

@@ -1,7 +1,7 @@
 #ifndef __compiler_re_h__
 #define __compiler_re_h__
 
-
+#include "ds.h"
 
 
 typedef void* re_table; 
@@ -23,19 +23,22 @@ typedef void* re_nfa;
 #define NFA_MAX (INT_MAX - 10)
 
 
+// nodes of the nfa graph
 typedef struct nfa_state {
-	int c;
+	int c; // c is the input needed to get to this node
 	struct nfa_state* out[2];
 } nfa_state;
 
 
+// type magic to store the output pointer list inside the out[2] pointers in nfa_state
 union frag_out {
 	union frag_out* next;
 	nfa_state* state;
 	nfa_state** pstate;
 };
 
-
+// container to hold the root nfa_state pointer and the start of the output linked list.
+// also holds a user-defined "tag" for later processing.
 typedef struct nfa_frag {
 	
 	nfa_state* start;
@@ -45,6 +48,29 @@ typedef struct nfa_frag {
 	int tag;
 	
 } nfa_frag;
+
+
+struct nfa_state_set;
+
+typedef struct nfa_state_set_edge {
+	int c;
+	struct nfa_state_set* target;
+} nfa_state_set_edge;
+
+
+typedef struct nfa_state_set {
+// 	int c;
+	
+	char has_start;
+	char has_terminal;
+	
+	// todo: pull tags through?
+	charSet out_chars;// cache for building the dfa
+	PointerSet states;
+	
+	
+} nfa_state_set;
+
 
 
 typedef struct nfa_table_edge {
@@ -57,6 +83,38 @@ typedef struct nfa_table_edge {
 	
 	int dfa_state;
 } nfa_table_edge;
+
+
+
+typedef struct dfa_edge {
+	int start;
+	int c;
+	int dest;
+} dfa_edge;
+
+
+typedef struct dfa_set {
+	int dfa_state;
+	int nfa_state;
+} dfa_set;
+
+
+typedef struct dfa_pair {
+	int dfa_state;
+	int nfa_state;
+} dfa_pair;
+
+
+typedef struct dfa_state_info {
+	int state_num;
+	int renamed_to;
+	
+	char is_terminal;
+	
+	VEC(int) nfa_states;
+} dfa_state_info;
+
+
 
 
 
