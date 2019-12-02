@@ -17,19 +17,43 @@ char* readFile(char* path, size_t* len);
 
 int main(int argc, char* argv) {
 	
-	lexer();
+// 	lexer();
 	
-	return 0;
+	PointerSet* ps = calloc(1, sizeof(*ps));
+	PointerSet* ps2 = calloc(1, sizeof(*ps2));
 	
+	PointerSet_insert(ps, 0x00004);
+	PointerSet_insert(ps, 0x00002);
+	PointerSet_insert(ps, 0x00003);
+	PointerSet_insert(ps, 0x00008);
+	PointerSet_insert(ps, 0x00008);
+	PointerSet_insert(ps, 0x00001);
+	PointerSet_insert(ps2, 0x00003);
+	PointerSet_insert(ps2, 0x00008);
+	PointerSet_insert(ps2, 0x00007);
+	PointerSet_insert(ps2, 0x00002);
+	PointerSet_insert(ps2, 0x00008);
+	PointerSet_print(ps);
+	PointerSet_print(ps2);
+	PointerSet* ps3 = PointerSet_intersect(ps, ps2);
+	PointerSet_print(ps3);
+	PointerSet* ps4 = PointerSet_union(ps, ps2);
+	PointerSet_print(ps4);
+	PointerSet* ps5 = PointerSet_difference(ps, ps2);
+	PointerSet_print(ps5);
+	
+// 	return 0;
+	re_nfa_from_string("ab|cd");
+// 	re_parse("ab|cd");
 // 	re_parse("ab|cd?e*f+|g");
 //	re_parse("abbbq?c|df");
 // 	re_parse("a|b|cd?e*f+|g|hij");
 	
 	return 0;
 	
-	char* content = readFile("./test.bnf", NULL);
+// 	char* content = readFile("./test.bnf", NULL);
 	
-	bnf_parse(content);
+// 	bnf_parse(content);
 	
 	
 }

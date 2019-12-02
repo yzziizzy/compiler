@@ -19,37 +19,6 @@
 
 
 
-
-#define NFA_E (0)
-#define NFA_MATCH (INT_MAX)
-#define NFA_SPLIT (INT_MAX - 1)
-#define NFA_OP_CAT (INT_MAX - 2)
-#define NFA_ANY (INT_MAX - 3)
-
-#define NFA_MAX (INT_MAX - 10)
-
-typedef struct nfa_state {
-	int c;
-	struct nfa_state* out[2];
-} nfa_state;
-
-union frag_out {
-	union frag_out* next;
-	nfa_state* state;
-	nfa_state** pstate;
-};
-
-typedef struct nfa_frag {
-	
-	nfa_state* start;
-	
-	union frag_out out;
-	
-	int tag;
-	
-} nfa_frag;
-
-
 static nfa_state terminal_state;
 
 
@@ -138,7 +107,7 @@ static void append_frag_list(nfa_frag* a, nfa_frag* b) {
 // set the out list to point to this state
 static void patch_frag_list(nfa_frag* f, nfa_state* st) {
 	
-	print_frag(f, 4 );
+// 	print_frag(f, 4 );
 	
 	union frag_out* n;
 	union frag_out* fo = &f->out;
@@ -387,7 +356,7 @@ static int pop_op(re_parse_state* ps) {
 }
 
 static void push_op(re_parse_state* ps, int t) {
-	printf("pushing %s onto op stack \n", token_names[t]);
+// 	printf("pushing %s onto op stack \n", token_names[t]);
 	VEC_PUSH(&ps->op_stack, t);
 }
 
@@ -401,9 +370,9 @@ static void run_op(re_parse_state* ps, int op) {
 	nfa_frag* f1 = NULL;
 	nfa_frag* f0 = NULL;
 	nfa_frag* fn = NULL;
-	printf("running op: %s\n", token_names[op]);
-	print_op_stack(ps, 1);
-	print_val_stack(ps, 1);
+// 	printf("running op: %s\n", token_names[op]);
+// 	print_op_stack(ps, 1);
+// 	print_val_stack(ps, 1);
 	
 	
 	switch(op) {
@@ -443,10 +412,7 @@ static void run_op(re_parse_state* ps, int op) {
 
 
 
-static void nfa_to_table(nfa_state* start); 
-
-
-
+// static void nfa_to_table(nfa_state* start); 
 
 
 void* re_nfa_from_string(char* source) {
@@ -466,11 +432,11 @@ void* re_nfa_from_string(char* source) {
 // 		else printf(" token: %s \n", token_names[ps.token]);
 // 		continue;
 		
- 		printf("\n+++++++++++\ntoken: %d '%c'\n", ps.token, ps.c);
- 		print_op_stack(&ps, 1);
+//  		printf("\n+++++++++++\ntoken: %d '%c'\n", ps.token, ps.c);
+//  		print_op_stack(&ps, 1);
 		
 		if(ps.token == TOK_NONE) {
-			printf("pushing char: %c\n", ps.c);
+// 			printf("pushing char: %c\n", ps.c);
 			push_val(&ps, frag_char(ps.c));
 			
 // 			// bootstrap the first character
@@ -490,7 +456,7 @@ void* re_nfa_from_string(char* source) {
 				continue;
 			}
 			
-			printf("push %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
+// 			printf("push %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
 			if(token_arity[ps.token] == 1) run_op(&ps, ps.token);
 			else push_op(&ps, ps.token);
 			break;
@@ -504,13 +470,14 @@ void* re_nfa_from_string(char* source) {
 // 		push_op(&ps, t);
 // 	}
 // 	
+	/*
 	printf("\n\ndone with loop\n");
 	printf("done %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
 	print_op_stack(&ps, 1);
 	printf("--------------\n");
 	print_val_stack(&ps, 1);
 	printf("--------------\n");
-	
+	*/
 	// empty out the operator queue
 	
 	while(t = pop_op(&ps)) {
@@ -521,11 +488,11 @@ void* re_nfa_from_string(char* source) {
 	}
 
 	
-	printf("*******************\n");
+// 	printf("*******************\n");
 	
 	if(VEC_LEN(&ps.val_stack) > 1) {
 			printf("extra values left on stack\n");
-			*((int*)0) = 1;
+			*((int*)0) = 1; // die
 	}
 	
 	nfa_frag* f = VEC_HEAD(&ps.val_stack);
@@ -539,32 +506,42 @@ void* re_nfa_from_string(char* source) {
 	nfa_to_table(f->start);
 	*/
 	
-	return f;
+	VEC_FREE(&ps.op_stack);
+	VEC_FREE(&ps.val_stack);
+	
+	return f; // nfa_frag
 }
 
+
+
+
+
+    ////////////////////////
+   //                    //
+  //   DFA Processing   //
+ //                    //
+////////////////////////
+
+
+
+
+
+// ??
 void re_mark_terminal(void* _f) {
 	nfa_frag* f = _f;
 	
 	patch_frag_list(f, &terminal_state);
 }
+
+// ??
 void re_tag(void* _f, int tag) {
 	nfa_frag* f = _f;
-	_f->tag;
+	f->tag = tag;
 }
 
 
-typedef struct nfa_table_edge {
-	int start;
-	int c;
-	int dest;
-	
-	char is_start;
-	char is_terminal;
-	
-	int dfa_state;
-} nfa_table_edge;
 
-
+// convert an nfa graph to a transition table
 re_table re_compile_nfa(re_nfa _n) {
 // static void nfa_to_table(nfa_state* start) {
 	
@@ -578,17 +555,16 @@ re_table re_compile_nfa(re_nfa _n) {
 	VEC_INIT(&table);
 	VEC_INIT(&lookup);
 	
-	VEC(nfa_state*) visited;
+	PointerSet* visited = PointerSet_alloc();
 	VEC(nfa_state*) stack;
-	VEC_INIT(&visited);
 	VEC_INIT(&stack);
 	
 	
 	// thanks, gcc
 	int find_state_index(nfa_state* state) {
-		VEC_EACH(&lookup, sti, st) {
-			if(st == state) return sti;
-		}
+		int i = VEC_INDEXOF(&lookup, state);
+		if(i >= 0) return i; 
+		
 		VEC_PUSH(&lookup, state);
 		return VEC_LEN(&lookup) - 1;
 	}
@@ -609,14 +585,7 @@ re_table re_compile_nfa(re_nfa _n) {
 		}));
 		return 1;
 	}
-	
-	int has_visited(nfa_state* st) {
-		VEC_EACH(&visited, vi, v) {
-			if(v == st) return 1;
-		}
-		return 0;
-	}
-	
+		
 	
 	// the start state is implicit
 	// push it first
@@ -625,19 +594,22 @@ re_table re_compile_nfa(re_nfa _n) {
 	VEC_PUSH(&lookup, &terminal_state);
 	
 	VEC_EACH(&stack, si, s) {
-		VEC_PUSH(&visited, s);
+		PointerSet_insert(visited, s);
 		
 		for(int i = 0; i < 2; i++) {
 			if(!s->out[i]) continue;
 			insert_edge(s, s->out[i]->c, s->out[i]);
 			
-			if(!has_visited(s->out[i])) {
+			if(!PointerSet_exists(visited, s->out[i])) {
 				VEC_PUSH(&stack, s->out[i]);
 			}
 		}
 		
 		
 	}
+	
+	// should be here?
+	PointerSet_free(visited);
 	
 	/*
 	VEC_LOOP(&table, ei) {
@@ -708,7 +680,7 @@ re_table re_compile_nfa(re_nfa _n) {
 		return 1;
 	} 
 	
-	// walk all the epison edges and add them to the dfa table
+	// walk all the epsilon edges and add them to the dfa table
 	int e_closure(int start_n, dfa_state_info* dst) {
 		printf("closing %d\n", start_n);
 		
@@ -842,7 +814,7 @@ re_table re_compile_nfa(re_nfa _n) {
 		VEC_TRUNC(&chars);
 		add_all_chars(ds, &chars);
 	
-		printf("-- %d %p  (%d chars [", dsi, ds, (int)VEC_LEN(&chars)); 
+		printf("-- %ld %p  (%d chars [", dsi, ds, (int)VEC_LEN(&chars)); 
 		VEC_EACH(&chars, ci, c) printf("%c {%d}, ", c, c);
 		printf("])\n");
 		
@@ -884,6 +856,58 @@ re_table re_compile_nfa(re_nfa _n) {
 	
 	// dfa minimization
 	// TODO:
+	
+	
+	
+	
+	
+	
+	
+/*
+void re_dfa_match(re_table _d, char* input) {
+	
+	dfa_table* dtable = _d;
+	
+	int len = strlen(input);
+	
+	int curstate = 0;
+	int i = 0;
+	
+	for(; i < len; i++) {
+		char c = input[i];
+		printf("c: %c, i: %d\n", c, i);
+		
+		VEC_EACH(&dtable, dei, de) {
+			if(de.start != curstate) continue;
+			if(de.c != c) continue;
+			
+			curstate = de.dest;
+			printf(" matched %c, moving to %d\n", de.c, de.dest); 
+			if(VEC_ITEM(&dfainfo, curstate)->is_terminal) {
+				printf("found terminal state %d\n", de.start); 
+				goto MATCHED;
+			}
+			goto NEXT;
+		}
+		
+		// failed;
+		printf("failed\n");
+		return;
+	
+	NEXT:
+		(void)0;
+		printf("next\n");
+	}
+	
+MATCHED:
+	
+	printf("matched\n");
+	
+}
+	
+	
+*/
+	
 	
 	
 	/*
@@ -941,44 +965,3 @@ re_table re_compile_nfa(re_nfa _n) {
 
 
 
-
-void re_dfa_match(re_table _d, char* input) {
-	
-	dfa_table* dtable = _d;
-	
-	int len = strlen(input);
-	
-	int curstate = 0;
-	int i = 0;
-	
-	for(; i < len; i++) {
-		char c = input[i];
-		printf("c: %c, i: %d\n", c, i);
-		
-		VEC_EACH(&dtable, dei, de) {
-			if(de.start != curstate) continue;
-			if(de.c != c) continue;
-			
-			curstate = de.dest;
-			printf(" matched %c, moving to %d\n", de.c, de.dest); 
-			if(VEC_ITEM(&dfainfo, curstate)->is_terminal) {
-				printf("found terminal state %d\n", de.start); 
-				goto MATCHED;
-			}
-			goto NEXT;
-		}
-		
-		// failed;
-		printf("failed\n");
-		return;
-	
-	NEXT:
-		(void)0;
-		printf("next\n");
-	}
-	
-MATCHED:
-	
-	printf("matched\n");
-	
-}
