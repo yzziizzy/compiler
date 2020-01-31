@@ -1,8 +1,7 @@
 #ifndef __compiler_re_h__
 #define __compiler_re_h__
 
-#include "ds.h"
-
+#include "sti/sti.h"
 
 typedef void* re_table; 
 typedef void* re_nfa; 
