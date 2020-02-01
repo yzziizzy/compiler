@@ -69,10 +69,17 @@ typedef struct nfa_state_set {
 	
 	VEC(nfa_state_set_edge) edges;
 	
+	// for table construction 
+	int stateIndex;
+	
+	
 } nfa_state_set;
 
 
-
+typedef struct re_table1 {
+	int c;
+	int next;
+} re_table1;
 
 
 
@@ -136,6 +143,9 @@ re_nfa re_nfa_from_string(char* source);
 
 re_table re_compile_nfa(re_nfa _n);
 void re_dfa_match(re_table _d);
+
+int re_match(void* regex, char* str);
+int re_match2(void* regex, char* str);
 
 
 #endif // __compiler_re_h__

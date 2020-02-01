@@ -45,9 +45,16 @@ int main(int argc, char* argv) {
 	PointerSet_print(ps5);
 	*/
 // 	return 0;
-	re_nfa n = re_nfa_from_string("ab+c|def");
+	re_nfa n = re_nfa_from_string("ab+cdef");
 	
 	re_compile_nfa_2(n);
+	
+	re_match(NULL, "abc");
+	re_match(NULL, "ab");
+	re_match(NULL, "abd");
+	re_match2(NULL, "abc");
+	re_match2(NULL, "ab");
+	re_match2(NULL, "abd");
 // 	re_parse("ab|cd");
 // 	re_parse("ab|cd?e*f+|g");
 //	re_parse("abbbq?c|df");

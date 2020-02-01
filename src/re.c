@@ -862,11 +862,171 @@ void re_compile_nfa_2(re_nfa _n) {
 	// minimization is the next step
 	
 	
+	// TODO: minimize
 	
 	
+	// convert the minimal dfa into a nice table for the regex matcher
+	VEC(re_table1) table;
+	VEC_INIT(&table);
+	
+	VEC(int) state_pos;
+	VEC_INIT(&state_pos);
+	
+	// give each state an ID
+	VEC_EACH(&stack, z, s) {
+		s->stateIndex = z;
+	}
+	
+	VEC_EACH(&stack, z, s) {
+		// keep track of where this state was inserted so we can fix from the ID later
+		VEC_PUSH(&state_pos, VEC_LEN(&table));
+		
+		VEC_EACH(&s->edges, zz, e) {
+			if(e.target->has_terminal) {
+				VEC_PUSH(&table, ((re_table1){e.c, INT_MAX - 1}));
+			}
+			else {
+				VEC_PUSH(&table, ((re_table1){e.c, e.target->stateIndex}));
+			}
+		}
+		
+		// state terminator
+		if(VEC_TAIL(&table).next != INT_MAX) { // suppress duplicates
+			VEC_PUSH(&table, ((re_table1){' ', INT_MAX}));
+		}
+	}
+	
+	// just in case
+	if(VEC_TAIL(&table).next != INT_MAX) {
+		VEC_PUSH(&table, ((re_table1){' ', INT_MAX}));
+	}
+	
+	// change all the state ID's to the cached table indices
+	VEC_EACH(&table, z, t) {
+		if(t.next < INT_MAX - 1) t.next = VEC_ITEM(&state_pos, t.next);
+		printf("%d, {'%c', %d},\n", z, t.c, t.next);
+	}
+	
+	VEC_FREE(&state_pos);
 	
 	
+	// TODO: lots of cleanup
 }
+
+
+
+
+int re_match(void* regex, char* str) {
+	
+	
+	struct {
+		int base;
+		int c;
+		int next;
+	} table[] = {
+		{0, ' ', 2}, // start marker
+		{1, ' ', 0}, // terminal state
+		{2, 'a', 3},
+		{3, 'b', 4},
+		{4, 'c', 1},
+		{0, ' ', 0}, // list terminator
+	};
+	
+	int base = table[0].next;
+	int ind = table[0].next;
+	
+	
+	for(int i = 0; str[i]; i++) {
+		while(base == table[ind].base) {
+			if(table[ind].c == str[i]) {
+				base = table[ind].next;
+				ind = base;
+				
+				if(ind == 1) {
+					goto TERMINAL;
+				}
+				
+				goto NEXT;
+			}
+			else {
+				ind++;
+			}
+		}
+		
+		printf("no match\n");
+		return 1;
+		
+	NEXT:
+		continue;
+	}
+	
+	
+	printf("ended\n");
+	return 1;
+	
+TERMINAL:
+	printf("matched\n");
+	return 0;
+}
+
+
+
+int re_match2(void* regex, char* str) {
+	
+	
+	struct {
+		int c;
+		int next;
+	} table[] = {
+		{'a', 2},
+		{'-', INT_MAX},
+		{'b', 4},
+		{'-', INT_MAX},
+		{'c', INT_MAX - 1},
+		{'-', INT_MAX},
+	};
+	
+	int ind = 0;
+	
+	for(int i = 0; str[i]; i++) {
+		while(table[ind].next != INT_MAX) {
+			if(table[ind].c == str[i]) {
+				ind = table[ind].next;
+				
+				if(ind == INT_MAX - 1) {
+					goto TERMINAL;
+				}
+				
+				goto NEXT;
+			}
+			else {
+				ind++;
+			}
+		}
+		
+		printf("no match\n");
+		return 1;
+		
+	NEXT:
+		continue;
+	}
+	
+	
+	printf("ended\n");
+	return 1;
+	
+TERMINAL:
+	printf("matched\n");
+	return 0;
+}
+
+
+
+
+
+
+
+
 /*
 
 // convert an nfa graph to a transition table
