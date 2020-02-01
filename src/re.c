@@ -621,7 +621,23 @@ void nfa_state_set_free(nfa_state_set* s) {
 void nfa_state_set_union(nfa_state_set* a, nfa_state_set* b) {
 	PointerSet_union_inplace(&a->states, &b->states);
 	charSet_union_inplace(&a->out_chars, &b->out_chars);
+	a->has_terminal |= b->has_terminal;
+	a->has_start |= b->has_start;
 }
+
+
+static void pnfass(nfa_state_set* ss) {
+	printf("nfass: %p [", ss);
+	for(int i = 0; i < ss->states.length; i++) {
+		printf("%p,", (intptr_t)ss->states.set[i] & 0xffffff);
+	}
+	printf("], (");
+	for(int i = 0; i < ss->out_chars.length; i++) {
+		printf("%d/%c,", ss->out_chars.set[i],ss->out_chars.set[i]);
+	}
+	printf(")\n");
+}
+
 
 
 nfa_state_set* nfa_state_e_closure(nfa_state* st) {
@@ -640,12 +656,20 @@ nfa_state_set* nfa_state_e_closure(nfa_state* st) {
 		
 		PointerSet_insert(&set->states, cur_st);
 		
+// 		if(cur_st->c != NFA_SPLIT) {
+// 			printf("oc: %d/%c\n", cur_st->c,cur_st->c);
+// 			charSet_insert(&set->out_chars, cur_st->c);
+// 		}
+		
+		
 // 		pnfa(cur_st);
 		
 		for(int o = 0; o < 2; o++) {
 			if(cur_st->out[o] == NULL) continue;
-			if(cur_st->out[o] == &terminal_state) continue;
-			
+			if(cur_st->out[o] == &terminal_state) {
+				set->has_terminal = 1;
+				continue; // yes exit
+			}
 			
 			int oc = cur_st->out[o]->c;
 			printf("oc: %d/%c\n", oc, oc);
@@ -654,6 +678,7 @@ nfa_state_set* nfa_state_e_closure(nfa_state* st) {
 			if(oc != NFA_SPLIT) {
 				charSet_insert(&set->out_chars, oc);
 			}
+			
 			
 			if(oc == NFA_SPLIT) {
 				VEC_PUSH(&stack, cur_st->out[o]);
@@ -702,22 +727,25 @@ nfa_state_set* nfa_state_set_move(nfa_state_set* set, int c) {
 		
 		// each branch from the input state
 		for(int o = 0; o < 2; o++) {
-			
 			// a state that can be transitioned to
 			nfa_state* t_st = cur_st->out[o];
 			
 			if(t_st == NULL) continue; // no exit
-			if(t_st == &terminal_state) continue; // yes exit
-			
-			// save this set for later
+			if(t_st == &terminal_state) {
+				set->has_terminal = 1;
+				continue; // yes exit
+			}
+			/* / save this set for later
 			if(t_st->c != NFA_SPLIT) {
 				charSet_insert(&out->out_chars, t_st->c);
-			}
+			}*/
 			
 			// only ones reachable by c
 			if(t_st->c == c) {
 				PointerSet_insert(&out->states, t_st);
 			}
+			printf("  -%d %p ", o, (intptr_t)cur_st->out[o] & 0xffffff); pnfass(out);
+			
 		}
 	}
 
@@ -736,16 +764,10 @@ void nfa_state_set_e_closure(nfa_state_set* set) {
 	for(int i = 0; i < set->states.length; i++) {
 		nfa_state* cur_st = set->states.set[i];
 		
-		// each branch from the input state
-		for(int o = 0; o < 2; o++) {
-			if(cur_st->out[o] == NULL) continue;
-			if(cur_st->out[o] == &terminal_state) continue;
-			
-			nfa_state_set* x = nfa_state_e_closure(cur_st->out[o]);
-			nfa_state_set_union(out, x);
-			
-			nfa_state_set_free(x);
-		}
+		nfa_state_set* x = nfa_state_e_closure(cur_st);
+		nfa_state_set_union(out, x);
+		
+		nfa_state_set_free(x);
 	}
 	
 	nfa_state_set_union(set, out);
@@ -762,24 +784,23 @@ int nfa_state_set_cmp(nfa_state_set** a, nfa_state_set** b) {
 }
 
 
-static void pnfass(nfa_state_set* ss) {
-	printf("nfass: %p [", ss);
-	for(int i = 0; i < ss->states.length; i++) {
-		printf("%p,", (intptr_t)ss->states.set[i] & 0xffffff);
-	}
-	printf("]\n");
-}
-
 void re_compile_nfa_2(re_nfa _n) {
 	nfa_state* start = ((nfa_frag*)_n)->start;
+	
+	if(start->c != NFA_SPLIT) {
+		start = new_state(NFA_SPLIT, start, NULL);
+	}
 	
 	// first convert the nfa to a non-minimal dfa
 	
 	StructSet dfa_states; // each dfa state is itself a set of nfa states
 	StructSet_init(&dfa_states, nfa_state_set*, nfa_state_set_cmp);
 	
+	pnfa_deep(start, 10);
+	
 	// all the nfa states we can get to from the start state with no input (e-transition)
 	nfa_state_set* nss_start = nfa_state_e_closure(start); 
+	nss_start->has_start = 1;
 	
 	VEC(nfa_state_set*) stack; // new, unique, unprocessed dfa states
 	VEC_INIT(&stack);
@@ -789,7 +810,8 @@ void re_compile_nfa_2(re_nfa _n) {
 	// process each unprocessed dfa state
 	// this stack only grows
 	VEC_EACH(&stack, z, s) {
-		printf("dfa: %p %d %d chars: [", s, s->has_start, s->has_terminal);
+		printf("***************\n");
+		printf("input dfa: %p %d %d chars: [", s, s->has_start, s->has_terminal);
 		for(int i = 0; i < s->out_chars.length; i++) {
 			printf("%d/%c,", s->out_chars.set[i],s->out_chars.set[i]);
 		}
@@ -799,18 +821,47 @@ void re_compile_nfa_2(re_nfa _n) {
 		for(int i = 0; i < s->out_chars.length; i++) {
 			int c = s->out_chars.set[i];
 			
-			printf("==========\n");
+			printf("  ========== oc: %c\n", c);
 			nfa_state_set* s2 = nfa_state_set_move(s, c);
 			nfa_state_set_e_closure(s2);
 			
-			if(!StructSet_insert(&dfa_states, s2)) {
+			
+			
+			nfa_state_set* exist;
+			if(!StructSet_insertGet(&dfa_states, s2, &exist)) {
 				// set is new
 				printf("new dfa state: ");
  				pnfass(s2);
+				
+				VEC_PUSH(&s->edges, ((nfa_state_set_edge){c, s2}));
+				
 				VEC_PUSH(&stack, s2);
+			}
+			else {
+				VEC_PUSH(&s->edges, ((nfa_state_set_edge){c, exist}));
 			}
 		}
 	}
+	
+	
+	printf("\n..............\n");
+	VEC_EACH(&stack, z, s) {
+		printf("  interim dfa: %p, %s [", 
+			   shp(s), 
+			   s->has_start ? (s->has_terminal ? "B" : "S") : (s->has_terminal ? "T" : " "));
+		
+		VEC_EACH(&s->edges, zz, e) {
+			printf("%c->%p, ", e.c, shp(e.target));
+		}
+		printf("]\n");
+	}
+	printf("\n..............\n");
+	
+	
+	// the dfa is fully constructed at this point
+	// minimization is the next step
+	
+	
 	
 	
 	

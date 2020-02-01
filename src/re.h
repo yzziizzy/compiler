@@ -6,7 +6,7 @@
 typedef void* re_table; 
 typedef void* re_nfa; 
 
-
+#define shp(p) ((intptr_t)p & 0xffffff)
 
 
 
@@ -67,8 +67,18 @@ typedef struct nfa_state_set {
 	charSet out_chars;// cache for building the dfa
 	PointerSet states;
 	
+	VEC(nfa_state_set_edge) edges;
 	
 } nfa_state_set;
+
+
+
+
+
+
+// old
+
+
 
 
 
