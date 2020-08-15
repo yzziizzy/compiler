@@ -10,3 +10,6 @@ add_executable(compiler
 	src/rle.c
 	src/sti/sti.c
 )
+
+
+target_link_libraries(compiler m)

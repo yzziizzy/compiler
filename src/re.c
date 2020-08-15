@@ -111,7 +111,7 @@ static void print_frag_state(nfa_frag* f, nfa_state* st, int indent) {
 }
 
 static void print_frag(nfa_frag* f, int indent) {
-	printf("%*sF> %p, start: %p \n", indent, " ", f, f->start);
+	printf("%*sF-> %p, start: %p \n", indent, " ", f, f->start);
 	
 	print_frag_state(f, f->start, indent + 2);
 	
@@ -253,7 +253,7 @@ static nfa_frag* frag_plus(nfa_frag* a) {
 
 
 enum re_token {
-	TOK_NONE = 0,
+	TOK_NONE = 2000000,
 	TOK_CAT,
 	TOK_CAT_AUTO,
 	TOK_ALT,
@@ -263,6 +263,18 @@ enum re_token {
 	TOK_OPT,
 	TOK_GRP_OP,
 	TOK_GRP_CL,
+	TOK_CS_OP,
+	TOK_CS_CL,
+	TOK_REP_OP,
+	TOK_REP_CL,
+	
+	// character sets
+	TOK_CC_WS, // whitespace
+	TOK_CC_I_WS, // inverse whitespace
+	TOK_CC_WORDCHAR,
+	TOK_CC_I_WORDCHAR,
+	TOK_CC_DIGIT,
+	TOK_CC_I_DIGIT,
 };
 
 static char* token_names[] = {
@@ -276,6 +288,8 @@ static char* token_names[] = {
 	[TOK_OPT] = "TOK_OPT",
 	[TOK_GRP_OP] = "TOK_GRP_OP",
 	[TOK_GRP_CL] = "TOK_GRP_CL",
+	[TOK_CS_OP] = "TOK_CS_OP",
+	[TOK_CS_CL] = "TOK_CS_CL",
 };
 
 static int token_precedence[] = {
@@ -288,7 +302,9 @@ static int token_precedence[] = {
 	[TOK_ANY] = 0,
 	[TOK_OPT] = 12,
 	[TOK_GRP_OP] = -1,
-	[TOK_GRP_CL] = 99,
+	[TOK_GRP_CL] = -2,
+	[TOK_CS_OP] = -1,
+	[TOK_CS_CL] = -2,
 };
 
 static char token_arity[] = {
@@ -300,8 +316,17 @@ static char token_arity[] = {
 	[TOK_PLUS] = 1,
 	[TOK_ANY] = 0,
 	[TOK_OPT] = 1,
-	[TOK_GRP_OP] = 0,
-	[TOK_GRP_CL] = 0,
+	[TOK_GRP_OP] = 2,
+	[TOK_GRP_CL] = 2,
+	[TOK_CS_OP] = 2,
+	[TOK_CS_CL] = 2,
+	
+	[TOK_CC_WS] = 0,
+	[TOK_CC_I_WS] = 0,
+	[TOK_CC_WORDCHAR] = 0,
+	[TOK_CC_I_WORDCHAR] = 0,
+	[TOK_CC_DIGIT] = 0,
+	[TOK_CC_I_DIGIT] = 0,
 };
 
 
@@ -355,6 +380,163 @@ static int peek_char(char* s) {
 }
 
 
+int parse_re_token(char** s) {
+	
+	int type;
+	
+	switch(**s) {
+		case '^': type = TOK_NONE; break; 
+		case '$': type = TOK_NONE; break; 
+		case '?': 
+			type = TOK_OPT;
+			break;  
+		case '|': 
+			type = TOK_ALT;
+			break;  
+		case '*': 
+			type = TOK_STAR;
+			break;  
+		case '+': 
+			type = TOK_PLUS;
+			break;  
+		case '.': 
+			type = TOK_ANY;
+			break;  
+		case '(': 
+			type = TOK_GRP_OP;
+			break;  
+		case ')': 
+			type = TOK_GRP_CL;
+			break;
+		case '[': 
+			type = TOK_CS_OP;
+			break;  
+		case ']': 
+			type = TOK_CS_CL;
+			break;
+		case '{': 
+			type = TOK_REP_OP;
+			break;  
+		case '}': 
+			type = TOK_REP_CL;
+			break;
+		
+		// escape
+		case '\\' :
+			(*s)++;
+			type = TOK_NONE; // cclass
+			switch(**s) {
+				case 's': break; 
+				case 'S': break;
+				case 'd': break;
+				case 'D': break;
+				case 'w': break;
+				case 'W': break;
+				case 'b': break;
+				case 'B': break;
+				
+				default:
+					type = **s; // char literal
+					break;
+			}
+			break;
+			
+		default:
+			type = **s;
+	}
+	
+	(*s)++;
+	
+	return type;
+}
+
+
+void parse_re_string(char* src) {
+	VEC(int) charset;
+	
+	char* s = src;
+	
+	int last_token = TOK_NONE;
+	int cur_token;
+	
+	while(*s) {
+		int c = parse_re_token(&s);
+		cur_token = c;
+		
+		// characters below TOK_NONE are literals
+		if(c >= TOK_NONE) {
+			switch(c) {
+				case TOK_REP_OP:
+					// parse reps
+					break;
+				case TOK_REP_CL:
+					// should never get here
+					break;
+				case TOK_CS_OP:
+					// parse character set
+					s++;
+					
+					
+					// invert
+					if(*s == '^') {
+						s++;
+					}
+					
+					// dash literal
+					if(*s == '-') {
+						s++;
+					}
+					
+					while(*s) {
+						switch(*s)
+							case ']': goto DONE;
+							case '\\':
+								s++;
+								switch(*s) {
+									case 's': break; 
+									case 'S': break;
+									case 'd': break;
+									case 'D': break;
+									case 'w': break;
+									case 'W': break;
+									case 'b': break;
+									case 'B': break;
+									default:
+										
+										break;
+								}
+								
+								break;
+						s++;
+					}
+					DONE:
+						
+					break;
+				case TOK_CS_CL:
+					// should never get here
+					break;
+					
+				case TOK_GRP_OP:
+					// special
+					if(*s == '?') {
+						s++;
+					} 
+					
+					break;
+				
+				case TOK_GRP_CL:
+					// should never get here
+					break;
+					
+				default:
+					// process operators according to precedence
+					break;
+			}
+		}
+	}
+}
+
+
 
 // returns 0 when done
 static int next_token(re_parse_state* ls) {
@@ -365,8 +547,13 @@ static int next_token(re_parse_state* ls) {
 	if(nc == 0) return 0;
 	
 	if(token_arity[ls->token] != 2) { 
-		if(token_arity[nt] < 1) { 
+		if(token_arity[nt] == 0) { 
 			// output an auto cat
+			printf("emitting CAT_AUTO %s:%d, %s:%d\n", 
+				   token_names[ls->token],
+				   token_arity[ls->token], 
+			token_names[nt],   
+		  token_arity[nt]);
 			ls->token = TOK_CAT_AUTO;
 			
 			return 1;
@@ -385,7 +572,7 @@ static int next_token(re_parse_state* ls) {
 	
 	ls->c = c;
 	ls->token = classify_token(c);
-	
+	printf("emitting %s\n", token_names[ls->token]);
 	return 1;
 }
 
@@ -424,9 +611,10 @@ static void run_op(re_parse_state* ps, int op) {
 	nfa_frag* f1 = NULL;
 	nfa_frag* f0 = NULL;
 	nfa_frag* fn = NULL;
-// 	printf("running op: %s\n", token_names[op]);
-// 	print_op_stack(ps, 1);
-// 	print_val_stack(ps, 1);
+	
+	printf("\n\nrunning op: %s\n", token_names[op]);
+	print_op_stack(ps, 1);
+	print_val_stack(ps, 1);
 	
 	
 	switch(op) {
@@ -458,6 +646,44 @@ static void run_op(re_parse_state* ps, int op) {
 			fn = frag_plus(f0);
 			push_val(ps, fn);
 			break;
+		case TOK_GRP_OP:
+// 			push_op(ps, op);
+			break;
+		case TOK_GRP_CL:
+			printf("CLOSING here ======= \n");
+			
+			while(1) {
+				printf("eating group stack\n");
+		print_op_stack(ps, 5);
+	print_val_stack(ps, 5);
+	printf(".......\n");
+				
+				
+				int op2 = pop_op(ps);
+				if(op2 == TOK_GRP_OP) break;
+				run_op(ps, op2);
+				
+// 					continue;
+// 				}
+				
+// 				printf("push %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
+// 				if(ps->token == TOK_GRP_OP) break;
+// 				printf("tok: %s\n", token_names[ps->token]);
+// 				if(token_arity[ps->token] == 1) run_op(ps, ps->token);
+// 				else push_op(ps, ps->token);
+// 				break;
+			}
+			
+			
+// 			f0 = pop_val(ps);
+// 			fn = frag_plus(f0);
+// 			push_val(ps, fn);
+			
+			// pop val, wrap, push
+			
+			break;
+		default:
+			printf("unknown token\n");
 	}
 	
 // 	if(f0) pnfa(f0->start);
@@ -484,9 +710,11 @@ void* re_nfa_from_string(char* source) {
 	VEC_INIT(&ps.val_stack);
 	
 	int op = 0;
+	int N = 0;
 	
 	while(next_token(&ps)) {
-		
+// 		printf("outter loop\n");
+		if(N++ > 100) break;
 // 		if(ps.token == TOK_NONE) printf(" token: %s '%c'\n", token_names[ps.token], ps.c);
 // 		else printf(" token: %s \n", token_names[ps.token]);
 // 		continue;
@@ -494,8 +722,12 @@ void* re_nfa_from_string(char* source) {
 //  		printf("\n+++++++++++\ntoken: %d '%c'\n", ps.token, ps.c);
 //  		print_op_stack(&ps, 1);
 		
-		if(ps.token == TOK_NONE) {
-// 			printf("pushing char: %c\n", ps.c);
+		if(ps.token == TOK_ANY) {
+			push_val(&ps, frag_char(11000));
+			continue;
+		}
+		else if(ps.token == TOK_NONE) {
+			printf("pushing char: %c\n", ps.c);
 			push_val(&ps, frag_char(ps.c));
 			
 // 			// bootstrap the first character
@@ -508,14 +740,28 @@ void* re_nfa_from_string(char* source) {
 		
 		
 		while(1) {
+// 			printf("main run loop\n");
 			int prec = token_precedence[ps.token];
+			if(N++ > 100) break;
+			
+			// group openings and closings
+			if(prec == -1) {
+				printf("pushing group open\n");
+				push_op(&ps, ps.token);
+				break;
+			}
+			if(prec == -2) {
+				run_op(&ps, ps.token);
+				break;
+			}
+			
 			int top = top_prec(&ps);
 			if(top > prec) {
 				run_op(&ps, pop_op(&ps));
 				continue;
 			}
 			
-// 			printf("push %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
+			printf("push %d %d\n", (int)VEC_LEN(&ps.val_stack), (int)VEC_LEN(&ps.op_stack));
 			if(token_arity[ps.token] == 1) run_op(&ps, ps.token);
 			else push_op(&ps, ps.token);
 			break;
@@ -615,12 +861,12 @@ nfa_state_set* new_nfa_state_set() {
 
 void nfa_state_set_free(nfa_state_set* s) {
 	PointerSet_destroy(&s->states);
-	charSet_destroy(&s->out_chars);
+	intSet_destroy(&s->out_chars);
 }
 
 void nfa_state_set_union(nfa_state_set* a, nfa_state_set* b) {
 	PointerSet_union_inplace(&a->states, &b->states);
-	charSet_union_inplace(&a->out_chars, &b->out_chars);
+	intSet_union_inplace(&a->out_chars, &b->out_chars);
 	a->has_terminal |= b->has_terminal;
 	a->has_start |= b->has_start;
 }
@@ -658,7 +904,7 @@ nfa_state_set* nfa_state_e_closure(nfa_state* st) {
 		
 // 		if(cur_st->c != NFA_SPLIT) {
 // 			printf("oc: %d/%c\n", cur_st->c,cur_st->c);
-// 			charSet_insert(&set->out_chars, cur_st->c);
+// 			intSet_insert(&set->out_chars, cur_st->c);
 // 		}
 		
 		
@@ -676,7 +922,7 @@ nfa_state_set* nfa_state_e_closure(nfa_state* st) {
 			
 			// save this set for later
 			if(oc != NFA_SPLIT) {
-				charSet_insert(&set->out_chars, oc);
+				intSet_insert(&set->out_chars, oc);
 			}
 			
 			
@@ -704,7 +950,7 @@ nfa_state_set* nfa_state_move(nfa_state* st, int c) {
 		
 		// save this set for later
 		if(oc != NFA_SPLIT) {
-			charSet_insert(&set->out_chars, oc);
+			intSet_insert(&set->out_chars, oc);
 		}
 		
 		if(oc == c) {
@@ -737,7 +983,7 @@ nfa_state_set* nfa_state_set_move(nfa_state_set* set, int c) {
 			}
 			/* / save this set for later
 			if(t_st->c != NFA_SPLIT) {
-				charSet_insert(&out->out_chars, t_st->c);
+				intSet_insert(&out->out_chars, t_st->c);
 			}*/
 			
 			// only ones reachable by c
@@ -903,7 +1149,7 @@ void re_compile_nfa_2(re_nfa _n) {
 	
 	// change all the state ID's to the cached table indices
 	VEC_EACH(&table, z, t) {
-		if(t.next < INT_MAX - 1) t.next = VEC_ITEM(&state_pos, t.next);
+		if(t.next < INT_MAX - 100) t.next = VEC_ITEM(&state_pos, t.next);
 		printf("%d, {'%c', %d},\n", z, t.c, t.next);
 	}
 	

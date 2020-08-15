@@ -45,7 +45,7 @@ int main(int argc, char* argv) {
 	PointerSet_print(ps5);
 	*/
 // 	return 0;
-	re_nfa n = re_nfa_from_string("ab+cdef");
+	re_nfa n = re_nfa_from_string("a(bc|BC)");
 	
 	re_compile_nfa_2(n);
 	

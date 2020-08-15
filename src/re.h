@@ -64,7 +64,7 @@ typedef struct nfa_state_set {
 	char has_terminal;
 	
 	// todo: pull tags through?
-	charSet out_chars;// cache for building the dfa
+	intSet out_chars;// cache for building the dfa
 	PointerSet states;
 	
 	VEC(nfa_state_set_edge) edges;
