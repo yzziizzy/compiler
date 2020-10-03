@@ -27,8 +27,8 @@
 #define TERM_BK_GRAY       "\x1b[47m"
 
 
-
-
+void print_node_core(rb_node* n);
+int rb_is_red(rb_node* n);
 
 int get_depth(rb_node* n) {
 	if(!n) return -1;
@@ -106,14 +106,13 @@ void print_node_core(rb_node* n) {
 
 char* keys[] = {
 // 	"aaa", "aab", "aac", "aad", "aae", "aaf", "aag", "aah", "aai",
-	"qtq","cse","qku","aert","atet","jgsg",
-	"qwq","qse","wku","sert","stet","hgsg",
-	"awq","wse","eku","dert","dtet","ggsg",
-	"swq","ese","rku","fert","ftet","fgsg",
-	"fwq","rse","tku","gert","gtet","dgsg",
-	"gwq","tse","yku","hert","htet","qgsg",
-	"hwq","jse","uku","jert","jtet","agsg",
+	"A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
 };
+
+char* LLkeys[] = {"Z", "Y", "X", "W"};
+char* LRkeys[] = {"Z", "X", "Y", "W"};
+char* RRkeys[] = {"V", "W", "X", "Y"};
+char* RLkeys[] = {"V", "X", "W", "Y"};
 
 
 #define mask(x) (void*)((uint64_t)0xff & (uint64_t)(x)>>4)
@@ -122,53 +121,104 @@ void print_tree(rb_node* n, int off) {
 	if(!n) return;
 	
 	if(rb_is_red(n))
-		printf(TERM_COLOR_RED "% *s%x " TERM_RESET " -> [%x, %x] ^%x\n", off, " ", mask(n), mask(n->kids[0]), mask(n->kids[1]), mask(n?n->parent:0));
+		printf(TERM_COLOR_RED "% *s%x " TERM_RESET " -> (%s)[%x, %x] ^%x\n", off, " ", mask(n), n->key, mask(n->kids[0]), mask(n->kids[1]), mask(n?n->parent:0));
 	else
-		printf("% *s%x -> [%x, %x] ^%x\n", off, " ", mask(n), mask(n->kids[0]), mask(n->kids[1]), mask(n?n->parent:0));
+		printf("% *s%x -> (%s)[%x, %x] ^%x\n", off, " ", mask(n), n->key, mask(n->kids[0]), mask(n->kids[1]), mask(n?n->parent:0));
 	
 	print_tree(n->kids[0], off + 2);
 	print_tree(n->kids[1], off + 2);
 }
 
+int check_black_height(rb_node* n) {
+	if(!n) return 1;
+	int a = check_black_height(n->kids[0]);
+	int b = check_black_height(n->kids[1]);
+	if(a != b) printf("\n\n!!! --- height mismatch at %s --------------\n\n", n->key);
+	return a + !n->color;
+}
 
+
+int get_max_height(rb_node* n) {
+	if(n == NULL) return 0;
+	int a = get_max_height(n->kids[0]);
+	int b = get_max_height(n->kids[1]);
+	return (a > b ? a : b) + 1;
+}
+
+
+void html_print_node(rb_node* n, int h) {
+	if(h == 0) return;
+	
+	char* type = n ? (rb_is_red(n) ? "red" : "black") : "dummy"; 
+	char* barren = n ? ((n->kids[0] == NULL && n->kids[1] == NULL) ? " barren" : "") : "";
+	
+	fprintf(dbg, "<div class=\"node %s%s\">\n", type, barren);
+		fprintf(dbg, "<div class=\"key\">%s</div>", n ? n->key : "");
+		fprintf(dbg, "<div class=\"lines\"></div>");
+		fprintf(dbg, "<div class=\"child left\">\n");
+			html_print_node(n ? n->kids[0] : NULL, h-1);
+		fprintf(dbg, "</div>\n");
+		fprintf(dbg, "<div class=\"child right\">\n");
+			html_print_node(n ? n->kids[1] : NULL, h-1);
+		fprintf(dbg, "</div>\n");
+	fprintf(dbg, "</div>\n");
+	fflush(dbg);
+}
+
+void html_header() {
+	fprintf(dbg, "<html>\n<head>\n");
+	fprintf(dbg, "<link rel=\"stylesheet\" type=\"text/css\" href=\"debug.css\" />\n");
+	fprintf(dbg, "</head>\n<body>\n");
+}
+
+void html_spacer() {
+	fprintf(dbg, "<br><br><hr><br><br><br>");
+}
+
+void html_footer() {
+	fprintf(dbg, "</body>\n</html>\n");
+}	
+
+char* Qkeys[] = {
+// 	"Q","H","E","A","T","N","Ra","I","O","P","A","D","Ea", "Ia",
+	"Z","Y","X","W","U","V","Ra","I","O","P","A","D","Ea", "Ia",
+	
+};
 
 int main(int argc, char* argv[]) {
 	
+	FILE* f = fopen("./debug.html", "wb");
+	dbg = f;
+	html_header();
 	
-	/*
-	rb_node* gg = rb_new_node(NULL, "foo", NULL); 
-	rb_node* g = rb_new_node(gg, "foo", NULL); 
-	rb_node* p = rb_new_node(g, "foo", NULL); 
-	rb_node* u = rb_new_node(p, "foo", NULL); 
-	rb_node* x = rb_new_node(p, "foo", NULL); 
-	
-	gg->kids[0] = g;
-	g->kids[0] = u;
-	g->kids[1] = p;
-	p->kids[1] = x;
-	
-	print_tree(gg, 0);
-	
-	rb_rotate_left(g);
-	
-	print_tree(gg, 0);
-	
-	return 0;
-	*/
 	rb_tree_ t;
 	t.root = NULL;
 	int val = 5;
 	
-	for(int i = 0; i < 34; i++) {
-		rb_insert_(&t, keys[i], &val);
+	for(int i = 0; i < 12; i++) {
+		rb_insert_(&t, Qkeys[i], &val);
 		
+		fprintf(f, "i: %d\n", i);
+		html_print_node(t.root, get_max_height(t.root)); html_spacer();
 		
+		check_black_height(t.root);
 		
 		print_tree(t.root, 0);
 		printf("\n\n");
 	}
-
+	rb_delete(&t, "V", NULL);
+// 	rb_delete(&t, "N", NULL);
+// 	rb_delete(&t, "Ra", NULL);
 	
+ 	html_print_node(t.root, get_max_height(t.root)); html_spacer();
+	fprintf(f, "Deleting\n");
+	printf("----------\n");
+	
+	rb_delete(&t, "Z", NULL);
+ 	html_print_node(t.root, get_max_height(t.root)); html_spacer();
+	
+	html_footer();
+	fclose(f);
 	
 // 	printf("depth: %d\n", get_depth(t.root));
 // 	print_level(t.root, 0, 0); printf("\n");
