@@ -129,14 +129,57 @@ void print_tree(rb_node* n, int off) {
 	print_tree(n->kids[1], off + 2);
 }
 
-int check_black_height(rb_node* n) {
+int check_double_red(rb_node* n) {
+	if(!n) return 0;
+	if(n->color) {
+		if(n->kids[0] && n->kids[0]->color) goto BAD;
+		if(n->kids[1] && n->kids[1]->color) goto BAD;
+	}
+	return check_double_red(n->kids[0]) + check_double_red(n->kids[1]);
+BAD:
+	printf("\n!!! ---- double red at %s -----\n\n", n->key);
+	return 1;
+}
+
+int check_black_height(rb_node* n, int* bad) {
 	if(!n) return 1;
-	int a = check_black_height(n->kids[0]);
-	int b = check_black_height(n->kids[1]);
-	if(a != b) printf("\n\n!!! --- height mismatch at %s --------------\n\n", n->key);
+	int a = check_black_height(n->kids[0], bad);
+	int b = check_black_height(n->kids[1], bad);
+	if(a != b) {
+		printf("\n\n!!! --- height mismatch at %s --------------\n\n", n->key);
+		*bad = 1;
+	}
 	return a + !n->color;
 }
 
+char rand_char() {
+	static char* chars = "QWERTYUIOPASDFGHJKLZXCVBNM";
+	return chars[rand() % 26];
+}
+
+char** generate_random_keys(int len) {
+	char** out = malloc(len * sizeof(*out));
+	
+	int cl = 0;
+	
+	for(int i = 0; i < len; i++) {
+		char* k = malloc(5);
+	TRY_AGAIN:
+		k[0] = rand_char();
+		k[1] = rand_char();
+		k[2] = rand_char();
+		k[3] = rand_char();
+		k[4] = 0;
+		
+		for(int j = 0; j < cl; j++) {
+			if(0 == strcmp(k, out[j])) goto TRY_AGAIN;
+		}
+		
+		out[i] = k;
+	}
+	
+	return out;
+}
 
 int get_max_height(rb_node* n) {
 	if(n == NULL) return 0;
@@ -146,7 +189,7 @@ int get_max_height(rb_node* n) {
 }
 
 
-void html_print_node(rb_node* n, int h) {
+void html_print_node(rb_node* n, int h) { return;
 	if(h == 0) return;
 	
 	char* type = n ? (rb_is_red(n) ? "red" : "black") : "dummy"; 
@@ -165,18 +208,19 @@ void html_print_node(rb_node* n, int h) {
 	fflush(dbg);
 }
 
-void html_header() {
+void html_header() { return;
 	fprintf(dbg, "<html>\n<head>\n");
 	fprintf(dbg, "<link rel=\"stylesheet\" type=\"text/css\" href=\"debug.css\" />\n");
 	fprintf(dbg, "</head>\n<body>\n");
 }
 
-void html_spacer() {
+void html_spacer() { return;
 	fprintf(dbg, "<br><br><hr><br><br><br>");
 }
 
-void html_footer() {
+void html_footer() { return;
 	fprintf(dbg, "</body>\n</html>\n");
+	fclose(dbg);
 }	
 
 char* Qkeys[] = {
@@ -185,12 +229,76 @@ char* Qkeys[] = {
 	
 };
 
+void test_tree(int len) {
+	rb_tree_ t;
+	t.root = NULL;
+	int bad = 0;
+	int val = 5;
+	
+	char** keys = generate_random_keys(len);
+	
+	for(int i = 0; i < len; i++) {
+		printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\ninserting %s\n", keys[i]);
+		rb_insert_(&t, keys[i], &val);
+		html_print_node(t.root, get_max_height(t.root)); html_spacer();
+		check_black_height(t.root, &bad);
+		if(bad) {
+			printf("black height mismatch\n");
+			fprintf(dbg, "black height mismatch\n");
+			html_print_node(t.root, get_max_height(t.root)); html_spacer();
+			html_footer();
+			exit(1);
+		}
+		if(check_double_red(t.root)) {
+			printf("double red found\n");
+			html_footer();
+			exit(1);
+		}
+	}
+	
+	
+	for(int i = 0; i < len; i++) {
+		printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\ndeleting %s\n", keys[i]);
+// 		fprintf(dbg, "Deleted %s\n", keys[i]);
+		rb_delete(&t, keys[i], NULL);
+		printf("-------deletion complete\n");
+		printf(".root: %p\n", t.root);
+		html_print_node(t.root, get_max_height(t.root)); html_spacer();
+		fflush(dbg);
+		check_black_height(t.root, &bad);
+		if(bad) {
+			fprintf(dbg, "black height mismatch\n");
+			html_print_node(t.root, get_max_height(t.root)); html_spacer();
+			html_footer();
+			
+			printf("black height mismatch\n");
+			exit(1);
+		}
+		if(check_double_red(t.root)) {
+			printf("double red found\n");
+			html_footer();
+			exit(1);
+		}
+	}
+	
+	rb_trunc_(&t);
+}
+
+
 int main(int argc, char* argv[]) {
 	
 	FILE* f = fopen("./debug.html", "wb");
 	dbg = f;
 	html_header();
 	
+	
+	
+	test_tree(500);
+	
+	
+	
+	
+	/*
 	rb_tree_ t;
 	t.root = NULL;
 	int val = 5;
@@ -216,9 +324,9 @@ int main(int argc, char* argv[]) {
 	
 	rb_delete(&t, "Z", NULL);
  	html_print_node(t.root, get_max_height(t.root)); html_spacer();
-	
+	*/
 	html_footer();
-	fclose(f);
+	
 	
 // 	printf("depth: %d\n", get_depth(t.root));
 // 	print_level(t.root, 0, 0); printf("\n");

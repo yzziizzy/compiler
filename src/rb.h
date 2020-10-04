@@ -17,6 +17,7 @@ typedef struct rb_node {
 
 typedef struct rb_tree_ {
 	rb_node* root;
+	size_t size;
 } rb_tree_;
 
 #define RB(t) \
@@ -31,7 +32,7 @@ int rb_delete(rb_tree_* tree, char* key, void** data);
 
 rb_node* rb_find(rb_tree_* tree, char* key);
 
-
+void rb_trunc_(rb_tree_* t);
 
 // tmp
 
