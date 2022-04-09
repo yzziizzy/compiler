@@ -58,6 +58,7 @@ char* cflags[] = {
 	"-Wno-parentheses",
 	"-Wno-comment",
 	"-Wno-strict-aliasing",
+	"-Wno-endif-labels",
 	"-Werror=implicit-function-declaration",
 	"-Werror=uninitialized",
 	"-Werror=return-type",

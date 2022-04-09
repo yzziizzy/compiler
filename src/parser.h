@@ -1,8 +1,14 @@
+#ifndef __InfernalC__parser_h__
+#define __InfernalC__parser_h__
+
+
 
 #include <stddef.h>
 
 
 #include "sti/vec.h"
+
+#include "ast.h"
 
 
 #define LEXER_TOKEN_TYPES \
@@ -42,6 +48,7 @@ LEXER_TOKEN_TYPES
 extern char* lexer_token_names[];
 
 
+
 struct lexer_file;
 
 typedef struct {
@@ -77,11 +84,15 @@ typedef struct {
 
 	
 	lexer_file_t* lex;
+	size_t cur_token;
+	
+	ast_tu_t* tu;
 
 } parser_ctx_t;
 
 
 
+void parse_root(parser_ctx_t* ctx);
 
 
 int lex_process_file(lexer_file_t* lf);
@@ -98,3 +109,4 @@ int lex_process_file(lexer_file_t* lf);
 
 
 
+#endif __InfernalC__parser_h__

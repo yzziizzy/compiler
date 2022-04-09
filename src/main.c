@@ -16,6 +16,7 @@ int main(int argc, char* argv[]) {
 	
 	
 	parser_ctx_t ctx;
+	ctx.cur_token = 0;
 	
 	ctx.lex = calloc(1, sizeof(*ctx.lex));
 	
@@ -33,7 +34,7 @@ int main(int argc, char* argv[]) {
 		printf("> %s: %.*s\n", lexer_token_names[t->type], (int)t->len, t->text);
 	}
 	
-//	parse_root(&ctx);
+	parse_root(&ctx);
 	
 	
 	return 0;

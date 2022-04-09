@@ -12,11 +12,37 @@
 //#define LEX_printf(...) printf(__VA_ARGS__)
 #define LEX_printf(...) 
 
+#define P_printf(...) printf(__VA_ARGS__)
+//#define P_printf(...) 
+
+
+int _DEBUG_parse_lvl = 0;
+
+#define PARSE_DEBUG_START(...) do{ \
+	printf("%*s fn: %s [%ld:%ld: '%.*s' (%s)]\n", _DEBUG_parse_lvl, " ", __func__, \
+		ctx->lex->tokens.data[ctx->cur_token].line_num, \
+		ctx->lex->tokens.data[ctx->cur_token].col_num, \
+		(int)ctx->lex->tokens.data[ctx->cur_token].len, \
+		ctx->lex->tokens.data[ctx->cur_token].text, \
+		lexer_token_names[ctx->lex->tokens.data[ctx->cur_token].type] \
+		); \
+	_DEBUG_parse_lvl+=2; \
+}while(0);
+
+#define PARSE_DEBUG_END(...) do{_DEBUG_parse_lvl-=2;}while(0);
+
+
+
 static token_t* lex_push_token(lexer_file_t* lf, int type);
 static void lex_push_token_1(lexer_file_t* lf, int type);
 static void lex_push_token_2(lexer_file_t* lf, int type);
 static int lex_string_token(lexer_file_t* lf);
 static void lex_next_char(lexer_file_t* lf);
+
+
+#define X(x) ast_##x##_t* parse_##x(parser_ctx_t* ctx);
+	AST_TYPE_LIST
+#undef X
 
 
 
@@ -29,48 +55,391 @@ LEXER_TOKEN_TYPES
 #undef X
 
 
+#define X(x) [AST_TYPE_##x] = #x,
+char* ast_Type_names[] = {
+	[AST_TYPE_NONE] = "NONE",
+AST_TYPE_LIST
+	[AST_MAX_VALUE] = "MAX_VALUE"
+};
+#undef X
 
+
+
+token_t* cur_token(parser_ctx_t* ctx) {
+	if(ctx->cur_token > VEC_LEN(&ctx->lex->tokens)) return NULL; // BUG: should return a special invalid EOF token
+	return &VEC_ITEM(&ctx->lex->tokens, ctx->cur_token);
+}
+
+
+token_t* next_token(parser_ctx_t* ctx) {
+	ctx->cur_token++;
+	if(ctx->cur_token > VEC_LEN(&ctx->lex->tokens)) return NULL; // BUG: should return a special invalid EOF token
+	return &VEC_ITEM(&ctx->lex->tokens, ctx->cur_token);
+}
+
+token_t* peek_token(parser_ctx_t* ctx, int advance) {
+	if(ctx->cur_token + advance > VEC_LEN(&ctx->lex->tokens)) return NULL; // BUG: should return a special invalid EOF token
+	return &VEC_ITEM(&ctx->lex->tokens, ctx->cur_token + advance);
+}
 
 
 
 
 
 void parse_root(parser_ctx_t* ctx) {
-//	token_t tok;
-
-	// look for keywords, then branch into their fns
-//	next_token(ctx, &tok);
+	token_t* t;
 	
-//	if(tok.type == TOK_IDENT && 0 == strcmp("func", tok.text)) {
-//		parse_function(ctx);
-//	}
+	ctx->tu = calloc(1, sizeof(*ctx->tu));
 
+	while(1) {
+		t = cur_token(ctx);
+		
+		if(t->type == TOK_K_func) {
+			ast_func_t* fn = parse_func(ctx);
+			VEC_PUSH(&ctx->tu->fns, fn);
+		}
+		
+		if(ctx->cur_token >= VEC_LEN(&ctx->lex->tokens)) break;
+	}
+}
+
+
+ast_literal_t* parse_literal(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_literal_t* lit;
+	
+	lit = calloc(1, sizeof(*lit));
+
+	t = cur_token(ctx);
+	if(t->type == TOK_NUMBER) {
+		lit->value = strtol(t->text, NULL, 10);
+		ctx->cur_token++;
+	}
+	else {
+		free(lit);
+		lit = NULL;
+		ctx->cur_token++;
+	}
+
+	PARSE_DEBUG_END();
+	return lit;
+}
+
+
+ast_arg_t* parse_arg(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	fprintf(stderr, "parse_arg NYI\n");
+	PARSE_DEBUG_END();
+	return NULL;
+}
+
+ast_type_t* parse_type(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	
+	t = peek_token(ctx, 0);
+	if(t->type != TOK_TYPE) {
+		P_printf("Expected type\n");
+		return NULL;
+	}
+	
+	ast_type_t* rt = calloc(1, sizeof(*rt));
+	rt->type = t->text[0];
+	
+	while(1) {
+		t = next_token(ctx);
+		if(t->type == TOK_STAR) rt->ptr_lvl++;
+		else break;
+	}
+	
+	PARSE_DEBUG_END();
+	return rt;
 }
 
 
 
 
-void parse_function(parser_ctx_t* ctx) {
+ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_var_decl_t* v;
+	ast_type_t* type;
+
+	// grab the type
+	type = parse_type(ctx);
+	if(!type) return NULL;
+	t = cur_token(ctx);
+	
+	v = calloc(1, sizeof(*v));
+	v->type = type;
+	
+	// grab the name
+	if(t->type != TOK_IDENT) {
+		P_printf("Expected variable name at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	
+	v->name = strndup(t->text, t->len);
+	v->name_len = t->len;
+	
+	t = next_token(ctx);
+	
+	// check for an initialization
+	if(t->type == TOK_EQUAL) {
+		t = next_token(ctx);
+		
+		v->init = parse_expr(ctx);
+		
+	}
+	
+	PARSE_DEBUG_END();
+	return v;
+}
+
+
+ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_stmt_t* st;
+	
+	st = calloc(1, sizeof(*st));
+	
+	t = cur_token(ctx);
+	if(t->type == TOK_LBRACE) {
+		// block
+		st->type = AST_TYPE_block;
+		st->block = parse_block(ctx);
+	}
+	else if(t->type == TOK_TYPE) {
+		// declaration
+		st->type = AST_TYPE_var_decl;
+		st->var_decl = parse_var_decl(ctx);
+	}
+	else if(t->type == TOK_K_return) {
+		// return statement
+		st->type = AST_TYPE_stmt_return;
+		st->stmt_return = parse_stmt_return(ctx);
+	}
+	else {
+		P_printf("Expected statement at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	
+	// try to eat a semicolon
+	t = cur_token(ctx);
+	if(t->type != TOK_SEMI) {
+		P_printf("Expected semicolon at end of statement at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);				
+	}
+	ctx->cur_token++;
+	
+	PARSE_DEBUG_END();
+	return st;
+}
+
+
+
+ast_stmt_return_t* parse_stmt_return(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_stmt_return_t* r;
+	
+	r = calloc(1, sizeof(*r));
+	
+	// eat the return keyword
+	t = next_token(ctx);
+	
+	while(1) {
+		ast_expr_t* e = parse_expr(ctx);
+		if(e) {
+			VEC_PUSH(&r->values, e);
+		}
+		t = cur_token(ctx);
+		
+		
+		// eat the comma or semicolon
+		if(t->type == TOK_SEMI) break;
+		if(t->type != TOK_COMMA) {
+			P_printf("Expected comma or semicolon in return value list at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+			exit(1);				
+		}
+		t = next_token(ctx);
+	}
+	
+	//ctx->cur_token++;
+	
+	PARSE_DEBUG_END();
+	return r;
+}
+
+
+ast_block_t* parse_block(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_block_t* b;
+	
+	b = calloc(1, sizeof(*b));
+	
+	// eat the opening '{'
+	t = cur_token(ctx);
+	if(t->type != TOK_LBRACE) {
+		P_printf("Expected lbrace at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	t = next_token(ctx);
+	
+	// parse list of statements
+	do {
+		ast_stmt_t* st = parse_stmt(ctx);
+		VEC_PUSH(&b->statements, st);
+		
+		t = cur_token(ctx);
+	} while(t->type != TOK_RBRACE);
+		
+
+	// eat a  '}'
+//	t = cur_token(ctx);
+	if(t->type != TOK_RBRACE) {
+		P_printf("Expected rbrace at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	ctx->cur_token++;
+	
+	PARSE_DEBUG_END();
+	return b;
+}
+
+ast_func_t* parse_func(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t;
+	ast_type_t* rt;
+	
+	ast_func_t* func = calloc(1, sizeof(*func));
+	
 	
 	// "func" keyword is implied to be the current token
+	ctx->cur_token++;
 	
-	// eat a '('
-	// look for comma-separated list of arguments
-	// eat a ')'
 	// A:
 	//    eat a '('
 	//    look for comma-separated list of return types
 	//    eat a ')'
 	// or B:
 	//    eat a single return type
-	// or C:
-	//    find nothing
-	// eat a '{'
 	
-	// parse function body
+	t = peek_token(ctx, 0);
+	if(t->type == TOK_LPAREN) {
+		t = next_token(ctx); // eat the paren
+		
+		// look for list of multiple return types
+		do {
+			
+			rt = parse_type(ctx);
+			if(!rt) {
+				t = cur_token(ctx);
+				if(t->type != TOK_RPAREN) {
+					P_printf("Expected type at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+					exit(1);
+				}
+				else break;
+			}
+			
+			VEC_PUSH(&func->return_types, rt);
+			
+			t = cur_token(ctx);
+			if(t->type == TOK_RPAREN) break;
+			else if(t->type == TOK_COMMA) ctx->cur_token++; // eat the comma
+			else {
+				P_printf("Expected comma or rparen at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+				exit(1);
+			}
+			
+		} while(1);
+		ctx->cur_token++;
+	}
+	else if(t->type == TOK_TYPE) {
+		// single return type
+		rt = parse_type(ctx);
+		if(!rt) {
+			P_printf("Expected type at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+			exit(1);
+		}
+		
+		VEC_PUSH(&func->return_types, rt);
+	}
+	else {
+		P_printf("Unexpected %s at line %ld:%ld\n", lexer_token_names[t->type], t->line_num, t->col_num);
+		exit(1);
+		
+		ctx->cur_token++;
+	}
+	t = cur_token(ctx)
+	
+	
+	// find function name
+	;
+	if(t->type != TOK_IDENT) {
+		P_printf("Expected function name at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	
+	func->name = strndup(t->text, t->len);
+	t = next_token(ctx);
+	
+	
+	// eat a '('
+	// look for comma-separated list of arguments
+	// eat a ')'
+	
+	if(t->type != TOK_LPAREN) {
+		P_printf("Expected lparen name at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+		exit(1);
+	}
+	t = next_token(ctx);
+	
+	
+	// look for list of arguments
+	do {
+		if(t->type == TOK_RPAREN) break; // check for empty arg list or dangling comma scenario
+		
+		ast_arg_t* arg;
+		arg = calloc(1, sizeof(*arg));
+		
+		// grap the type
+		rt = parse_type(ctx);
+		if(!rt) {
+			t = cur_token(ctx);
+			if(t->type != TOK_RPAREN) {
+				P_printf("Expected type at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+				exit(1);
+			}
+			else break;
+		}
+		arg->type = rt;
+		
+		t = cur_token(ctx);
+		
+		// grab the name
+		if(t->type != TOK_IDENT) {
+			P_printf("Expected argument name at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+			exit(1);
+		}
+		
+		arg->name = strndup(t->text, t->len);
+		arg->name_len = t->len;
+		t = next_token(ctx);
+		
+		// check for comma and or of arg list
+		if(t->type == TOK_RPAREN) break;
+		else if(t->type == TOK_COMMA) ctx->cur_token++; // eat the comma
+		else {
+			P_printf("Expected comma or rparen at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+			exit(1);
+		}
+		
+	} while(1);
+	t = next_token(ctx);
 
-	// eat a  '}'
+	
+	// parse the function body
+	func->body = parse_block(ctx);
+	
 
+	PARSE_DEBUG_END();
+	return func; 
 }
 
 
@@ -626,6 +995,7 @@ static void lex_push_token_2(lexer_file_t* lf, int type) {
 
 int lex_process_file(lexer_file_t* lf) {
 	
+	lf->cur_line = 1;
 	
 	//jl->gotToken = 0;
 	
@@ -702,4 +1072,14 @@ int lex_process_file(lexer_file_t* lf) {
 //	return jl->eoi;
 	return 0;
 }
+
+
+
+
+
+
+
+
+// evil? perhaps.
+#include "parse_exp.c"
 
