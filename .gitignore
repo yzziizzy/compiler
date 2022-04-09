@@ -56,5 +56,9 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 
+/src/sti
+/build
+/hacer
+
 #executable
 /compiler

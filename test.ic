@@ -1,0 +1,24 @@
+
+
+
+
+
+
+
+
+
+
+
+func (s32, u8*) foobar(s8 a, u32 b, f32 c)  {
+	
+	s16 d = 0;
+	
+	
+
+	return d, "chafas";
+}
+
+
+
+
+
