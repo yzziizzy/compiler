@@ -6,6 +6,7 @@
 
 
 #include "parser.h"
+#include "codegen.h"
 #include "sti/fs.h"
 
 
@@ -36,6 +37,10 @@ int main(int argc, char* argv[]) {
 	
 	parse_root(&ctx);
 	
+	codegen_ctx_t* cgctx = calloc(1, sizeof(*cgctx));
+	
+	cg_linearize_tu(cgctx, ctx.tu);
+		
 	
 	return 0;
 }

@@ -32,7 +32,6 @@ int _DEBUG_parse_lvl = 0;
 #define PARSE_DEBUG_END(...) do{_DEBUG_parse_lvl-=2;}while(0);
 
 
-
 static token_t* lex_push_token(lexer_file_t* lf, int type);
 static void lex_push_token_1(lexer_file_t* lf, int type);
 static void lex_push_token_2(lexer_file_t* lf, int type);
@@ -56,7 +55,7 @@ LEXER_TOKEN_TYPES
 
 
 #define X(x) [AST_TYPE_##x] = #x,
-char* ast_Type_names[] = {
+char* ast_type_names[] = {
 	[AST_TYPE_NONE] = "NONE",
 AST_TYPE_LIST
 	[AST_MAX_VALUE] = "MAX_VALUE"
@@ -83,6 +82,24 @@ token_t* peek_token(parser_ctx_t* ctx, int advance) {
 }
 
 
+
+#define EXPECT(_t) \
+	if(t->type != _t) { \
+		P_printf("Expected %s at line %ld:%ld, found %s\n", lexer_token_names[_t], t->line_num, t->col_num, lexer_token_names[t->type]); \
+		exit(1); \
+	} \
+	
+
+#define EXPECT_MSG(_t, msg) \
+	if(t->type != _t) { \
+		P_printf("Expected " msg " at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]); \
+		exit(1); \
+	} \
+	
+	
+#define EAT(_t) \
+	EXPECT(_t) \
+	t = next_token(ctx);
 
 
 
@@ -194,13 +211,75 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 }
 
 
-ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+
+// TODO: this is actually an expression
+ast_stmt_call_t* parse_stmt_call(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	token_t* t;
+	ast_stmt_call_t* call;
+	
+	call = calloc(1, sizeof(*call));
+	
+	t = cur_token(ctx);
+	
+	
+	// function name, possibly with a sigil
+	EXPECT_MSG(TOK_IDENT, "function name")
+	char* n = t->text;
+	size_t l = t->len;
+	if(t->text[0] == '@') {
+		call->convention = 's'; // syscall, temporary syntax
+		n++;
+		l--;
+		if(l == 0) {
+			P_printf("Expected function name, found lone '$' at line %ld:%ld\n", t->line_num, t->col_num);
+			exit(1);
+		}
+	}
+	
+	call->name = strndup(n, l);
+	call->name_len = l;
+	
+	t = next_token(ctx);
+	
+	// eat a '('	
+	EAT(TOK_LPAREN)
+	
+	// argument list
+	while(1) {
+		ast_expr_t* e;
+		
+		if(t->type == TOK_RPAREN) break;
+		
+		e = parse_expr(ctx);
+		if(!e) {
+			P_printf("Expected expression in argument list at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
+			exit(1);
+		}
+		
+		VEC_PUSH(&call->args, e);
+		
+		t = cur_token(ctx);
+		
+		if(t->type == TOK_RPAREN) break;
+		EAT(TOK_COMMA)
+	}
+	
+	// eat a ')'
+	EAT(TOK_RPAREN)
+	
+
+	PARSE_DEBUG_END();
+	return call;
+}
+
+ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+	token_t* t, *t2;
 	ast_stmt_t* st;
 	
 	st = calloc(1, sizeof(*st));
 	
 	t = cur_token(ctx);
+	printf("t = %s\n", lexer_token_names[t->type]);
 	if(t->type == TOK_LBRACE) {
 		// block
 		st->type = AST_TYPE_block;
@@ -215,6 +294,20 @@ ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		// return statement
 		st->type = AST_TYPE_stmt_return;
 		st->stmt_return = parse_stmt_return(ctx);
+	}
+	else if(t->type == TOK_IDENT) {
+		t2 = peek_token(ctx, 1);
+		
+		// maybe a function call
+		if(t2->type == TOK_LPAREN) {
+			
+			st->type = AST_TYPE_stmt_call;
+			st->stmt_call = parse_stmt_call(ctx);
+		}
+		else {
+		
+			// assignments
+		}
 	}
 	else {
 		P_printf("Expected statement at line %ld:%ld, found %s\n", t->line_num, t->col_num, lexer_token_names[t->type]);
@@ -684,7 +777,7 @@ static int lex_ident_token(lexer_file_t* lf) {
 		if(!((*se >= 'a' && *se <= 'z')
 			|| (*se >= 'A' && *se <= 'Z')
 			|| (*se >= '0' && *se <= '9')
-			|| *se == '_')
+			|| *se == '_' || *se == '@')
 		) break;
 		
 		char_num++;
@@ -1044,7 +1137,7 @@ int lex_process_file(lexer_file_t* lf) {
 				break;
 				
 			default:
-				if(isalpha(c) || c == '_') {
+				if(isalpha(c) || c == '_' || c == '@') {
 					lex_ident_token(lf);
 					break;
 				}

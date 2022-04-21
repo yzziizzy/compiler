@@ -6,7 +6,7 @@
 
 
 
-
+/*
 
 
 func (s32, u8*) foobar(s8 a, u32 b, f32 c)  {
@@ -17,13 +17,13 @@ func (s32, u8*) foobar(s8 a, u32 b, f32 c)  {
 
 	return d, "chafas";
 }
+*/
 
 
-
-func s32 main(s32 argc, u8** argv) {
+func s32 _start(s32 argc, u8** argv) {
 	
 	
 	
-	return 1337;
+	@exit(1337);
 }
 

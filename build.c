@@ -6,6 +6,7 @@
 
 
 char* sources[] = {
+	"src/codegen.c",
 	"src/main.c",
 	"src/parser.c",
 	"src/sti/sti.c",

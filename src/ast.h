@@ -17,6 +17,7 @@
 	X(stmt) \
 	X(stmt_assign) \
 	X(stmt_return) \
+	X(stmt_call) \
 	X(block) \
 	X(func) \
 	X(tu) \
@@ -81,12 +82,20 @@ typedef struct ast_stmt_return {
 	VEC(ast_expr_t*) values;
 } ast_stmt_return_t;
 
+typedef struct ast_stmt_call {
+	int convention; // c = cdecl, s = syscall  
+	char* name;
+	size_t name_len;
+	VEC(ast_expr_t*) args;
+} ast_stmt_call_t;
+
 
 typedef struct ast_stmt {
 	int type;
 	union {
 		ast_var_decl_t* var_decl;
 		ast_stmt_assign_t* stmt_assign;
+		ast_stmt_call_t* stmt_call;
 		ast_stmt_return_t* stmt_return;
 		ast_block_t* block;
 		// fn call
