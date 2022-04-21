@@ -115,7 +115,9 @@ cg_stmt_t* cg_linearize_stmt(codegen_ctx_t* ctx, ast_stmt_t* astmt) {
 			else {
 				fprintf(stderr, "calling convention %d tNYI in %s\n", c->convention, __func__);
 				break;
-			}			
+			}
+			
+			break;			
 		}
 		default:
 			fprintf(stderr, "%s type NYI in %s\n", ast_type_names[astmt->type], __func__);

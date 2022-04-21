@@ -7,6 +7,7 @@
 
 #include "parser.h"
 #include "codegen.h"
+#include "string_int.h"
 #include "sti/fs.h"
 
 
@@ -14,6 +15,8 @@
 
 
 int main(int argc, char* argv[]) {
+	
+	string_internment_table_init(&global_string_internment_table);
 	
 	
 	parser_ctx_t ctx;

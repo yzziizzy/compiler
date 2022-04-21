@@ -6,6 +6,7 @@
 
 
 #include "parser.h"
+#include "string_int.h"
 
 
 
@@ -72,6 +73,7 @@ token_t* cur_token(parser_ctx_t* ctx) {
 
 token_t* next_token(parser_ctx_t* ctx) {
 	ctx->cur_token++;
+	
 	if(ctx->cur_token > VEC_LEN(&ctx->lex->tokens)) return NULL; // BUG: should return a special invalid EOF token
 	return &VEC_ITEM(&ctx->lex->tokens, ctx->cur_token);
 }
@@ -111,10 +113,12 @@ void parse_root(parser_ctx_t* ctx) {
 	while(1) {
 		t = cur_token(ctx);
 		
-		if(t->type == TOK_K_func) {
+		if(t->type == TOK_func) {
 			ast_func_t* fn = parse_func(ctx);
 			VEC_PUSH(&ctx->tu->fns, fn);
 		}
+		
+		break;
 		
 		if(ctx->cur_token >= VEC_LEN(&ctx->lex->tokens)) break;
 	}
@@ -193,7 +197,7 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		exit(1);
 	}
 	
-	v->name = strndup(t->text, t->len);
+	v->name = strnint(t->text, t->len);
 	v->name_len = t->len;
 	
 	t = next_token(ctx);
@@ -236,7 +240,7 @@ ast_stmt_call_t* parse_stmt_call(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		}
 	}
 	
-	call->name = strndup(n, l);
+	call->name = strnint(n, l);
 	call->name_len = l;
 	
 	t = next_token(ctx);
@@ -279,7 +283,7 @@ ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	st = calloc(1, sizeof(*st));
 	
 	t = cur_token(ctx);
-	printf("t = %s\n", lexer_token_names[t->type]);
+	//printf("t = %s\n", lexer_token_names[t->type]);
 	if(t->type == TOK_LBRACE) {
 		// block
 		st->type = AST_TYPE_block;
@@ -290,7 +294,7 @@ ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		st->type = AST_TYPE_var_decl;
 		st->var_decl = parse_var_decl(ctx);
 	}
-	else if(t->type == TOK_K_return) {
+	else if(t->type == TOK_return) {
 		// return statement
 		st->type = AST_TYPE_stmt_return;
 		st->stmt_return = parse_stmt_return(ctx);
@@ -469,7 +473,7 @@ ast_func_t* parse_func(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		exit(1);
 	}
 	
-	func->name = strndup(t->text, t->len);
+	func->name = strnint(t->text, t->len);
 	t = next_token(ctx);
 	
 	
@@ -511,7 +515,7 @@ ast_func_t* parse_func(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 			exit(1);
 		}
 		
-		arg->name = strndup(t->text, t->len);
+		arg->name = strnint(t->text, t->len);
 		arg->name_len = t->len;
 		t = next_token(ctx);
 		
@@ -792,14 +796,12 @@ static int lex_ident_token(lexer_file_t* lf) {
 	len = se - lf->head;
 	// TODO: check for null, infinity, undefined, nan
 	
-	str = malloc(len+1);
-	strncpy(str, lf->head, len);
-	str[len] = 0;
 	
 	int type = TOK_IDENT;
 	
+	str = strnint(lf->head, len);
 	
-#define check_keyword(x) if(0 == strcmp(str, #x)) type = TOK_K_##x;
+#define check_keyword(x) if(0 == strcmp(str, #x)) type = TOK_##x;
 #define check_type(x) if(0 == strcmp(str, #x)) type = TOK_TYPE;
 	
 	check_keyword(func)
@@ -825,6 +827,7 @@ static int lex_ident_token(lexer_file_t* lf) {
 //	val->s = str;
 	
 	token_t* tok = lex_push_token(lf, type);
+	tok->text = str;
 	tok->len = len;
 	
 	// advance to the end of the string
@@ -901,6 +904,8 @@ static int lex_number_token(lexer_file_t* lf) {
 	
 	token_t* tok = lex_push_token(lf, TOK_NUMBER);
 	tok->len = e - lf->head;
+	tok->text = strnint(lf->head, tok->len);
+	
 	
 	// advance to the end of the string
 	lf->cur_col += e - lf->head;
@@ -1039,7 +1044,7 @@ static token_t* lex_push_token(lexer_file_t* lf, int type) {
 	
 	token_t* t = &VEC_TAIL(&lf->tokens);
 	t->type = type;
-	t->text = lf->head;
+	t->text = NULL;
 	t->len = 0;
 	t->file = lf;
 	t->line_num = lf->cur_line;
@@ -1054,7 +1059,7 @@ static void lex_push_token_1(lexer_file_t* lf, int type) {
 	
 	token_t* t = &VEC_TAIL(&lf->tokens);
 	t->type = type;
-	t->text = lf->head;
+	t->text = strnint(lf->head, 1);
 	t->len = 1;
 	t->file = lf;
 	t->line_num = lf->cur_line;
@@ -1072,7 +1077,7 @@ static void lex_push_token_2(lexer_file_t* lf, int type) {
 	
 	token_t* t = &VEC_TAIL(&lf->tokens);
 	t->type = type;
-	t->text = lf->head;
+	t->text = strnint(lf->head, 2);
 	t->len = 2;
 	t->file = lf;
 	t->line_num = lf->cur_line;

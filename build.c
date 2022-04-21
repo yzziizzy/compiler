@@ -10,6 +10,7 @@ char* sources[] = {
 	"src/main.c",
 	"src/parser.c",
 	"src/sti/sti.c",
+	"src/string_int.c",
 	NULL,
 };
 

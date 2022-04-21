@@ -32,8 +32,8 @@
 	X(STRING) \
 	X(TYPE) \
 	\
-	X(K_func) \
-	X(K_return) \
+	X(func) \
+	X(return) \
 
 
 #define X(x) TOK_##x,
