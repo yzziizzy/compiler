@@ -9,7 +9,8 @@
 
 ast_expr_t* parse_expr(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	token_t* t, *t1;
-	ast_expr_t* e;
+	ast_expr_t* e = NULL;
+	symbol_t* s;
 
 	
 //	t = cur_token(ctx);
@@ -19,9 +20,18 @@ ast_expr_t* parse_expr(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	switch(t->type) {
 		case TOK_STRING:
 		case TOK_NUMBER:
-	
 			e = calloc(1, sizeof(*e));
-			e->literal = parse_literal(ctx); 
+			e->type = 'l';
+			
+			s = insert_symbol(ctx, NULL);
+			e->symbol = s;
+			
+			
+			s->ptr_lvl = -1;
+			s->value.l = strtol(t->text, NULL, 10);
+			s->type = 'l';
+			
+			ctx->cur_token++;
 			break;
 			
 		case TOK_IDENT:

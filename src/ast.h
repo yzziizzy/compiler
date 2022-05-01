@@ -42,9 +42,65 @@ extern char* ast_type_names[];
 
 
 
-typedef struct ast_literal {
-	int value;
-} ast_literal_t;
+#define SYM_TYPE_LIST \
+	X(unbound) \
+	X(literal) \
+
+
+#define X(x) SYM_TYPE_##x,
+enum {
+	SYM_TYPE_NONE = 0,
+SYM_TYPE_LIST
+	SYM_MAX_VALUE
+};
+#undef X
+
+
+struct symbol_table;
+
+
+
+typedef struct symbol {
+	int id;
+	int type;
+	int depth; // in bits
+	int ptr_lvl; // levels of indirection; -1 = literal, 0 = local var, 1 = f32*, 2 = f32**, etc
+	
+	char* name;
+	int scope_id;
+	
+	union {
+		double d;
+		float f;
+		long l;
+		unsigned long u;
+		char* str;
+	} value;
+} symbol_t;
+
+
+
+
+typedef struct ast_name_info {
+	int symbol_id; // -1 for unbound
+	char* name;
+} ast_name_info_t;
+
+
+typedef struct ast_scope_info {
+	VEC(ast_name_info_t) name_lookup;
+	struct ast_scope_info* parent;
+	struct symbol_table* table;
+} ast_scope_info_t;
+
+
+typedef struct symbol_table {
+	VEC(symbol_t) symbols;
+	VEC(ast_scope_info_t) scopes;
+} symbol_table_t;
+
+
+
 
 typedef struct ast_type {
 	char type; // [s]igned, [u]unsigned, [f]loat, [m]atrix, [v]oid
@@ -60,14 +116,17 @@ typedef struct ast_arg {
 } ast_arg_t;
 
 typedef struct ast_expr {
-	ast_literal_t* literal;
+	int type;
+	
+	union {
+		symbol_t* symbol;
+	};
 } ast_expr_t;
 
 
 typedef struct ast_var_decl {
 	ast_type_t* type;
-	char* name;
-	size_t name_len;
+	int name;
 	ast_expr_t* init;
 } ast_var_decl_t;
 
@@ -84,8 +143,7 @@ typedef struct ast_stmt_return {
 
 typedef struct ast_stmt_call {
 	int convention; // c = cdecl, s = syscall  
-	char* name;
-	size_t name_len;
+	symbol_t* name;
 	VEC(ast_expr_t*) args;
 } ast_stmt_call_t;
 
@@ -104,7 +162,8 @@ typedef struct ast_stmt {
 } ast_stmt_t;
 
 typedef struct ast_block {
-	VEC(ast_var_decl_t*) locals;
+	ast_scope_info_t* locals;
+	
 	VEC(ast_stmt_t*) statements;
 } ast_block_t;
 
@@ -113,7 +172,7 @@ typedef struct ast_func {
 	VEC(ast_type_t*) return_types;
 	VEC(ast_arg_t*) arguments;
 	
-	char* name;
+	int name;
 	
 	ast_block_t* body;
 
@@ -121,6 +180,9 @@ typedef struct ast_func {
 
 
 typedef struct ast_tu {
+	symbol_table_t* symtab;
+	
+	ast_scope_info_t* globals;
 	VEC(ast_func_t*) fns;
 
 } ast_tu_t;

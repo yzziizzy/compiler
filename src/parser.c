@@ -32,6 +32,12 @@ int _DEBUG_parse_lvl = 0;
 
 #define PARSE_DEBUG_END(...) do{_DEBUG_parse_lvl-=2;}while(0);
 
+int find_sym_id(ast_scope_info_t* si, char* name);
+symbol_t* insert_symbol(parser_ctx_t* ctx, char* name);
+
+static void push_scope(parser_ctx_t* ctx);
+static void pop_scope(parser_ctx_t* ctx);
+
 
 static token_t* lex_push_token(lexer_file_t* lf, int type);
 static void lex_push_token_1(lexer_file_t* lf, int type);
@@ -109,7 +115,11 @@ void parse_root(parser_ctx_t* ctx) {
 	token_t* t;
 	
 	ctx->tu = calloc(1, sizeof(*ctx->tu));
-
+	ctx->symtab = calloc(1, sizeof(*ctx->symtab));
+	ctx->tu->symtab = ctx->symtab;
+	
+	insert_symbol(ctx, NULL); // TEMP: occupy symbol id 0 for debugging clarity
+	
 	while(1) {
 		t = cur_token(ctx);
 		
@@ -125,25 +135,32 @@ void parse_root(parser_ctx_t* ctx) {
 }
 
 
-ast_literal_t* parse_literal(parser_ctx_t* ctx) { PARSE_DEBUG_START();
+symbol_t* parse_literal_(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	token_t* t;
-	ast_literal_t* lit;
+	symbol_t* s;
+//	ast_literal_t* lit;
 	
-	lit = calloc(1, sizeof(*lit));
+//	lit = calloc(1, sizeof(*lit));
+	
+	s = insert_symbol(ctx, NULL);
+	s->ptr_lvl = -1;
 
 	t = cur_token(ctx);
 	if(t->type == TOK_NUMBER) {
-		lit->value = strtol(t->text, NULL, 10);
+//		lit->value = strtol(t->text, NULL, 10);
+		s->value.l = strtol(t->text, NULL, 10);
+		s->type = 'l';
+			
 		ctx->cur_token++;
 	}
 	else {
-		free(lit);
-		lit = NULL;
+//		free(lit);
+//		lit = NULL;
 		ctx->cur_token++;
 	}
 
 	PARSE_DEBUG_END();
-	return lit;
+	return s;
 }
 
 
@@ -197,8 +214,10 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		exit(1);
 	}
 	
-	v->name = strnint(t->text, t->len);
-	v->name_len = t->len;
+	printf("NYI: var decl symbol lookup\n");
+	
+//	v->name = strnint(t->text, t->len);
+//	v->name_len = t->len;
 	
 	t = next_token(ctx);
 	
@@ -228,20 +247,17 @@ ast_stmt_call_t* parse_stmt_call(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	
 	// function name, possibly with a sigil
 	EXPECT_MSG(TOK_IDENT, "function name")
-	char* n = t->text;
-	size_t l = t->len;
+	
+	symbol_t* s = insert_symbol(ctx, t->text);
+	call->name = s;
+	
 	if(t->text[0] == '@') {
 		call->convention = 's'; // syscall, temporary syntax
-		n++;
-		l--;
-		if(l == 0) {
-			P_printf("Expected function name, found lone '$' at line %ld:%ld\n", t->line_num, t->col_num);
-			exit(1);
-		}
+//		if(l == 0) {
+//			P_printf("Expected function name, found lone '$' at line %ld:%ld\n", t->line_num, t->col_num);
+//			exit(1);
+//		}
 	}
-	
-	call->name = strnint(n, l);
-	call->name_len = l;
 	
 	t = next_token(ctx);
 	
@@ -379,6 +395,10 @@ ast_block_t* parse_block(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	}
 	t = next_token(ctx);
 	
+	
+	// set up a new scope
+	push_scope(ctx);
+		
 	// parse list of statements
 	do {
 		ast_stmt_t* st = parse_stmt(ctx);
@@ -386,6 +406,9 @@ ast_block_t* parse_block(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		
 		t = cur_token(ctx);
 	} while(t->type != TOK_RBRACE);
+
+	
+	pop_scope(ctx);
 		
 
 	// eat a  '}'
@@ -1173,9 +1196,48 @@ int lex_process_file(lexer_file_t* lf) {
 
 
 
+int find_sym_id(ast_scope_info_t* si, char* name) {
+	
+	VEC_EACHP(&si->name_lookup, i, p) {
+		if(p->name == name) return p->symbol_id;
+	}
+	
+	if(!si->parent) return -1;
+	
+	return find_sym_id(si->parent, name);
+}
 
+symbol_t* insert_symbol(parser_ctx_t* ctx, char* name) {
+	symbol_t* s;
+	ast_scope_info_t* si = ctx->cur_scope;
+	
+	
+	VEC_INC(&ctx->symtab->symbols);
+	s = &VEC_TAIL(&ctx->symtab->symbols);
+	
+	*s = (symbol_t){0};
+	s->id = VEC_LEN(&ctx->symtab->symbols) - 1;
+	
+	if(name) {
+		s->name = name;
+		VEC_INC(&si->name_lookup);
+		VEC_TAIL(&si->name_lookup).symbol_id = s->id;
+		VEC_TAIL(&si->name_lookup).name = name;
+	}
+	
+	return s;
+}
 
+static void push_scope(parser_ctx_t* ctx) {
+	ast_scope_info_t* s = calloc(1, sizeof(*ctx->cur_scope));
+	s->parent = ctx->cur_scope;
+	s->table = ctx->cur_scope->table;
+	ctx->cur_scope = s;
+}
 
+static void pop_scope(parser_ctx_t* ctx) {
+	if(ctx->cur_scope) ctx->cur_scope = ctx->cur_scope->parent;
+}
 
 
 // evil? perhaps.

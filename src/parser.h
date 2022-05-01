@@ -80,12 +80,18 @@ typedef struct lexer_file {
 
 
 
+
+
 typedef struct {
 
 	
 	lexer_file_t* lex;
 	size_t cur_token;
 	
+	VEC(ast_scope_info_t*) scope_stack;
+	ast_scope_info_t* cur_scope;
+	
+	symbol_table_t* symtab;
 	ast_tu_t* tu;
 
 } parser_ctx_t;

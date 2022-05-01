@@ -43,6 +43,8 @@ int main(int argc, char* argv[]) {
 	codegen_ctx_t* cgctx = calloc(1, sizeof(*cgctx));
 	
 	cg_linearize_tu(cgctx, ctx.tu);
+	
+	
 		
 	
 	return 0;
