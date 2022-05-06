@@ -49,6 +49,7 @@ struct string_internment_table global_string_internment_table;
 
 
 static ptrdiff_t find_bucket(string_internment_table_t* tab, uint64_t hash, char* key);
+static ptrdiff_t find_bucket_n(string_internment_table_t* tab, uint64_t hash, char* key, size_t key_len);
 static int resize(string_internment_table_t* tab, size_t new_size);
 
 
@@ -143,8 +144,7 @@ char* strnint_(struct string_internment_table* tab, char* s, size_t slen) {
 	
 	MurmurHash3_x64_128(s, slen, MURMUR_SEED, hash);
 	
-	bi = find_bucket(tab, hash[0], s);
-	
+	bi = find_bucket_n(tab, hash[0], s, slen);
 	
 	if(tab->ht.buckets[bi].value) {
 		// found it already, bail early
@@ -156,7 +156,7 @@ char* strnint_(struct string_internment_table* tab, char* s, size_t slen) {
 	// check size and grow if necessary
 	if((float)tab->ht.fill / (float)tab->ht.alloc_size >= 0.75) {
 		resize(tab, tab->ht.alloc_size * 2);
-		bi = find_bucket(tab, hash[0], s);
+		bi = find_bucket_n(tab, hash[0], s, slen);
 	}
 	
 	ps = intern_string(tab, s, slen);
@@ -223,6 +223,40 @@ static ptrdiff_t find_bucket(string_internment_table_t* tab, uint64_t hash, char
 		
 		if(bucket->hash == hash) {
 			if(!strcmp(key, bucket->value)) {
+				// bucket is the right one and contains a value already
+				return bi;
+			}
+			
+			// collision, probe next bucket
+		}
+		
+		bi = (bi + 1) % tab->ht.alloc_size;
+	} while(bi != startBucket);
+	
+	// should never reach here if the table is maintained properly
+	
+	
+	return -1;
+}
+
+
+static ptrdiff_t find_bucket_n(string_internment_table_t* tab, uint64_t hash, char* key, size_t key_len) {
+	int64_t startBucket, bi;
+	
+	bi = hash % tab->ht.alloc_size; 
+	startBucket = bi;
+	
+	do {
+		
+		hash_bucket_t* bucket = tab->ht.buckets + bi;
+		
+		// empty bucket
+		if(bucket->value == NULL) {
+			return bi;
+		}
+		
+		if(bucket->hash == hash) {
+			if(!strncmp(key, bucket->value, key_len)) {
 				// bucket is the right one and contains a value already
 				return bi;
 			}

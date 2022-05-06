@@ -25,6 +25,7 @@
 	X(COLON) \
 	X(COMMA) \
 	X(STAR) \
+	X(PLUS) \
 	X(EQUAL) \
 	X(EQUALEQUAL) \
 	X(IDENT) \

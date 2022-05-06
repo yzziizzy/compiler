@@ -47,6 +47,33 @@ static void print_taci_block(taci_block_t* bl, int line_offset) {
 	}
 }
 
+static symbol_t* new_temp(codegen_ctx_t* ctx) {
+	symbol_t* s;
+	
+	VEC_INC(&ctx->symtab->symbols);
+	s = &VEC_TAIL(&ctx->symtab->symbols);
+	
+	*s = (symbol_t){0};
+	s->flags |= SYM_TEMP;
+	s->id = VEC_LEN(&ctx->symtab->symbols) - 1;
+	
+	return s;
+}
+
+static symbol_t* copy_temp(codegen_ctx_t* ctx, symbol_t* o) {
+	symbol_t* s;
+	
+	VEC_INC(&ctx->symtab->symbols);
+	s = &VEC_TAIL(&ctx->symtab->symbols);
+	
+	*s = *o;
+	s->name = NULL;
+	s->flags |= SYM_TEMP;
+	s->id = VEC_LEN(&ctx->symtab->symbols) - 1;
+	
+	return s;
+}
+
 
 static char* asm_inst_names[] = {
 	[2] = "mov",
@@ -79,6 +106,15 @@ static void cat_taci_block(taci_block_t* a, taci_block_t* b) {
 
 
 
+// transforms fn_* operations to movs and calls
+void resolve_function_calling_conventions(codegen_ctx_t* ctx, taci_block_t* b) {
+//	VEC_EACH(b->tacis, i, to) {
+		
+//		copy_temp()
+		
+//	}
+}
+
 
 
 void cg_linearize_stmt(codegen_ctx_t* ctx, ast_stmt_t* astmt, taci_block_t* b) {
@@ -91,6 +127,19 @@ void cg_linearize_stmt(codegen_ctx_t* ctx, ast_stmt_t* astmt, taci_block_t* b) {
 	
 	
 	switch(astmt->type) {
+		case AST_TYPE_stmt_assign: {
+			ast_expr_t* rv = astmt->stmt_assign->rval;
+			
+			if(rv->type == 's') { // just a symbol
+				push_taci(b, new_taci(TACI_TYPE_set, astmt->stmt_assign->lval, rv->sym, 0));
+			}
+			else if(rv->type == 'a') { // arithmetic expression
+				push_taci(b, new_taci(TACI_TYPE_add, astmt->stmt_assign->lval, rv->arith->a, rv->arith->b));
+			}
+			
+			break;
+		}
+		
 		case AST_TYPE_stmt_return:
 			
 			VEC_EACH(&astmt->stmt_return->values, i, v) {
@@ -102,6 +151,14 @@ void cg_linearize_stmt(codegen_ctx_t* ctx, ast_stmt_t* astmt, taci_block_t* b) {
 			
 			break;
 		
+		case AST_TYPE_var_decl: {
+			// handle initialization
+			
+			// do nothing for now; the data is in the scope_info struct
+		
+			break;
+		}
+		
 		case AST_TYPE_stmt_call: {
 			ast_stmt_call_t* c = astmt->stmt_call;
 			
@@ -111,14 +168,15 @@ void cg_linearize_stmt(codegen_ctx_t* ctx, ast_stmt_t* astmt, taci_block_t* b) {
 				
 				// arguments that are present in the code
 				VEC_EACH(&c->args, i, arg) {
-					push_taci(b, new_taci(TACI_TYPE_fn_arg, arg->symbol->id, i, 0));
+					push_taci(b, new_taci(TACI_TYPE_fn_arg, arg->sym, i, 0));
 				}
 				
+				/* apparently not necessary
 				// fill in the rest of the empty arguments
 				for(int n = VEC_LEN(&c->args); n < 6; n++) {
 					push_taci(b, new_taci(TACI_TYPE_fn_arg, 0, n, 0));
 				}
-				
+				*/
 				
 				int fn_name = -1;
 				push_taci(b, new_taci(TACI_TYPE_fn_call, c->name->id, 0, 0));
@@ -146,6 +204,9 @@ cg_func_t* cg_linearize_func(codegen_ctx_t* ctx, cg_tu_t* cgtu, ast_func_t* afn)
 	fn = calloc(1, sizeof(*fn));
 	fn->code = calloc(1, sizeof(*fn->code));
 	
+	// the beginning of a function is a jump target
+	push_taci(fn->code, new_taci(TACI_TYPE_landing, 0, 0, 0));
+	
 	VEC_EACH(&afn->body->statements, i, astmt) {
 		
 		cg_linearize_stmt(ctx, astmt, fn->code);
@@ -167,8 +228,20 @@ cg_tu_t* cg_linearize_tu(codegen_ctx_t* ctx, ast_tu_t* atu) {
 	
 	
 	VEC_EACH(&atu->fns, i, afn) {
+		// late binding and name resolution
+	
+		// generate linear Three-Address Code
 		cg_func_t* cgfn = cg_linearize_func(ctx, cgtu, afn); 
+		
+		// convert to SSA
+		
+		// optimizations
+		
+		// register allocation
+		
+		// choose asm instructions
 		taci_to_x64(ctx, cgfn);
+		
 		
 		printf("\n--TAC:--\n");
 		print_taci_block(cgfn->code, 0);

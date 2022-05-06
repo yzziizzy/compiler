@@ -13,13 +13,19 @@ struct cg_block; typedef struct cg_block cg_block_t;
 
 
 #define TACI_TYPE_LIST \
-	X(move) \
-	X(load) \
-	X(return_val) \
-	X(return) \
-	X(fn_call_conv) \
+	X(add) \
+	X(call) \
 	X(fn_arg) \
 	X(fn_call) \
+	X(fn_call_conv) \
+	X(jmp) \
+	X(landing) \
+	X(load) \
+	X(move) \
+	X(nop) \
+	X(return) \
+	X(return_val) \
+	X(set) \
 
 
 #define X(x) TACI_TYPE_##x,
@@ -92,7 +98,7 @@ typedef struct {
 	void* rodata_base;
 	void* globals_base;
 	
-	symbol_table_t* symbols;
+	symbol_table_t* symtab;
 } codegen_ctx_t;
 
 

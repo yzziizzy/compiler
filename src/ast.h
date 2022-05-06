@@ -58,16 +58,20 @@ SYM_TYPE_LIST
 
 struct symbol_table;
 
-
+#define SYM_UNBOUND 0x0001
+#define SYM_TEMP    0x0002
 
 typedef struct symbol {
 	int id;
-	int type;
-	int depth; // in bits
-	int ptr_lvl; // levels of indirection; -1 = literal, 0 = local var, 1 = f32*, 2 = f32**, etc
+	short type;
+	unsigned short width; // vector width, in powers of 2
+	unsigned short depth; // bit depth of each element, in bits
+	short ptr_lvl; // levels of indirection; -1 = literal, 0 = local var, 1 = f32*, 2 = f32**, etc
 	
-	char* name;
+	unsigned int flags;
 	int scope_id;
+
+	char* name;
 	
 	union {
 		double d;
@@ -104,7 +108,8 @@ typedef struct symbol_table {
 
 typedef struct ast_type {
 	char type; // [s]igned, [u]unsigned, [f]loat, [m]atrix, [v]oid
-	int depth; // in bits
+	int depth; // element size in bits
+	int width; // vector width in elements
 	int ptr_lvl; // levels of indirection; 0 = actual value, 1 = f32*, 2 = f32**, etc
 } ast_type_t;
 
@@ -115,25 +120,30 @@ typedef struct ast_arg {
 	size_t name_len;
 } ast_arg_t;
 
+
+typedef struct ast_expr_arith {
+	int op, a, b;
+} ast_expr_arith_t;
+
 typedef struct ast_expr {
-	int type;
+	int type; // s, a
 	
 	union {
-		symbol_t* symbol;
+		int sym;
+		ast_expr_arith_t* arith;
 	};
 } ast_expr_t;
 
 
 typedef struct ast_var_decl {
-	ast_type_t* type;
-	int name;
+	int sym;
 	ast_expr_t* init;
 } ast_var_decl_t;
 
 
 typedef struct ast_stmt_assign {
-//	ast_lval_t* l;
-//	ast_rval_t* r;
+	int lval;
+	ast_expr_t* rval;
 } ast_stmt_assign_t;
 
 

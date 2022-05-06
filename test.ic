@@ -22,8 +22,16 @@ func (s32, u8*) foobar(s8 a, u32 b, f32 c)  {
 
 func s32 _start(s32 argc, u8** argv) {
 	
+	u64 x;
+	u64 y;
+	u64 z;
 	
+	x = 1300;	
+	y = 36;
+	z = x + y;
 	
-	@exit(1337);
+	//if(z > 1000) { z = z + 1 };
+	
+	@exit(z);
 }
 

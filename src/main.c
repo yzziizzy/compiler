@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
 	string_internment_table_init(&global_string_internment_table);
 	
 	
-	parser_ctx_t ctx;
+	parser_ctx_t ctx = {0};
 	ctx.cur_token = 0;
 	
 	ctx.lex = calloc(1, sizeof(*ctx.lex));

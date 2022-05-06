@@ -24,7 +24,7 @@ ast_expr_t* parse_expr(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 			e->type = 'l';
 			
 			s = insert_symbol(ctx, NULL);
-			e->symbol = s;
+			e->sym = s->id;
 			
 			
 			s->ptr_lvl = -1;
@@ -47,6 +47,11 @@ ast_expr_t* parse_expr(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 			}
 			else {
 				// probably just a variable
+				e = calloc(1, sizeof(*e));
+				e->type = 's';
+				
+				s = imply_symbol(ctx, t->text);
+				e->sym = s->id;
 				
 				ctx->cur_token++;
 			}

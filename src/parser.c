@@ -33,7 +33,9 @@ int _DEBUG_parse_lvl = 0;
 #define PARSE_DEBUG_END(...) do{_DEBUG_parse_lvl-=2;}while(0);
 
 int find_sym_id(ast_scope_info_t* si, char* name);
+symbol_t* get_symbol(ast_scope_info_t* si, int id);
 symbol_t* insert_symbol(parser_ctx_t* ctx, char* name);
+symbol_t* imply_symbol(parser_ctx_t* ctx, char* name);
 
 static void push_scope(parser_ctx_t* ctx);
 static void pop_scope(parser_ctx_t* ctx);
@@ -118,6 +120,9 @@ void parse_root(parser_ctx_t* ctx) {
 	ctx->symtab = calloc(1, sizeof(*ctx->symtab));
 	ctx->tu->symtab = ctx->symtab;
 	
+	// create the global scope
+	push_scope(ctx);
+	
 	insert_symbol(ctx, NULL); // TEMP: occupy symbol id 0 for debugging clarity
 	
 	while(1) {
@@ -199,6 +204,7 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	token_t* t;
 	ast_var_decl_t* v;
 	ast_type_t* type;
+	symbol_t* s;
 
 	// grab the type
 	type = parse_type(ctx);
@@ -206,7 +212,6 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	t = cur_token(ctx);
 	
 	v = calloc(1, sizeof(*v));
-	v->type = type;
 	
 	// grab the name
 	if(t->type != TOK_IDENT) {
@@ -214,10 +219,13 @@ ast_var_decl_t* parse_var_decl(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		exit(1);
 	}
 	
-	printf("NYI: var decl symbol lookup\n");
+	s = insert_symbol(ctx, t->text);
+	s->type = type->type;
+	s->width = type->width;
+	s->ptr_lvl = type->ptr_lvl;
+	free(type);
 	
-//	v->name = strnint(t->text, t->len);
-//	v->name_len = t->len;
+	v->sym = s->id;
 	
 	t = next_token(ctx);
 	
@@ -327,6 +335,49 @@ ast_stmt_t* parse_stmt(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 		else {
 		
 			// assignments
+			st->type = AST_TYPE_stmt_assign;
+			st->stmt_assign = calloc(1, sizeof(*st->stmt_assign));
+			
+			// expect an ident
+			t = cur_token(ctx);
+
+			EXPECT_MSG(TOK_IDENT, "lvalue")
+			symbol_t* r = imply_symbol(ctx, t->text);
+			st->stmt_assign->lval = r->id;
+			st->stmt_assign->rval = calloc(1, sizeof(*st->stmt_assign->rval));;
+			t = next_token(ctx);
+			
+			// eat an =
+			EAT(TOK_EQUAL)
+			
+			if(t->type == TOK_IDENT) {
+				st->stmt_assign->rval->type = 'a';
+				st->stmt_assign->rval->arith = calloc(1, sizeof(*st->stmt_assign->rval->arith));
+				
+				// expect an ident
+				EXPECT_MSG(TOK_IDENT, "rvalue")
+				symbol_t* a = imply_symbol(ctx, t->text);
+				st->stmt_assign->rval->arith->a = a->id;
+				t = next_token(ctx);
+				
+				// eat a +
+				EAT(TOK_PLUS)
+				st->stmt_assign->rval->arith->op = '+';
+				
+				// expect an ident
+				EXPECT_MSG(TOK_IDENT, "rvalue")
+				symbol_t* b = imply_symbol(ctx, t->text);
+				st->stmt_assign->rval->arith->b = b->id;
+				t = next_token(ctx);
+			}
+			else {
+				st->stmt_assign->rval->type = 's';
+				
+				EXPECT_MSG(TOK_NUMBER, "number")
+				symbol_t* b = insert_symbol(ctx, t->text);
+				st->stmt_assign->rval->sym = b->id;
+				t = next_token(ctx);
+			}
 		}
 	}
 	else {
@@ -1136,6 +1187,7 @@ int lex_process_file(lexer_file_t* lf) {
 			case '*': lex_push_token_1(lf, TOK_STAR); break;
 			case ',': lex_push_token_1(lf, TOK_COMMA); break;
 			case ':': lex_push_token_1(lf, TOK_COLON); break;
+			case '+': lex_push_token_1(lf, TOK_PLUS); break;
 			case '=': 
 				if(lf->head[1] != '=') lex_push_token_1(lf, TOK_EQUAL); 
 				else lex_push_token_2(lf, TOK_EQUALEQUAL); 
@@ -1151,7 +1203,7 @@ int lex_process_file(lexer_file_t* lf) {
 			
 			case '0': case '1': case '2': case '3': case '4': 
 			case '5': case '6': case '7': case '8': case '9':
-			case '-': case '+': case '.':
+			case '-': case '.':
 				lex_number_token(lf);
 				break;
 			
@@ -1202,21 +1254,25 @@ int find_sym_id(ast_scope_info_t* si, char* name) {
 		if(p->name == name) return p->symbol_id;
 	}
 	
-	if(!si->parent) return -1;
+	if(!si->parent) return 0;
 	
 	return find_sym_id(si->parent, name);
+}
+
+symbol_t* get_symbol(ast_scope_info_t* si, int id) {
+	return &VEC_ITEM(&si->table->symbols, id);
 }
 
 symbol_t* insert_symbol(parser_ctx_t* ctx, char* name) {
 	symbol_t* s;
 	ast_scope_info_t* si = ctx->cur_scope;
 	
-	
 	VEC_INC(&ctx->symtab->symbols);
 	s = &VEC_TAIL(&ctx->symtab->symbols);
 	
 	*s = (symbol_t){0};
 	s->id = VEC_LEN(&ctx->symtab->symbols) - 1;
+//	printf("inserting new symbol [%d]%s\n", s->id, name);
 	
 	if(name) {
 		s->name = name;
@@ -1228,10 +1284,27 @@ symbol_t* insert_symbol(parser_ctx_t* ctx, char* name) {
 	return s;
 }
 
+symbol_t* imply_symbol(parser_ctx_t* ctx, char* name) {
+	symbol_t* s = NULL;
+	int id = find_sym_id(ctx->cur_scope, name);
+	
+	if(id <= 0) {
+		s = insert_symbol(ctx, name);
+		s->flags |= SYM_UNBOUND;
+//		printf("creating unbound symbol [%d]%s\n", id, s->name);
+	}
+	else {
+		s = get_symbol(ctx->cur_scope, id);
+//		printf("found implied symbol [%d]%s\n", id, s->name);
+	}
+	
+	return s;
+}
+
 static void push_scope(parser_ctx_t* ctx) {
 	ast_scope_info_t* s = calloc(1, sizeof(*ctx->cur_scope));
 	s->parent = ctx->cur_scope;
-	s->table = ctx->cur_scope->table;
+	s->table = ctx->symtab;
 	ctx->cur_scope = s;
 }
 
