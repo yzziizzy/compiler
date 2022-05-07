@@ -11,6 +11,7 @@ char* sources[] = {
 	"src/parser.c",
 	"src/sti/sti.c",
 	"src/string_int.c",
+	"src/x64/instructions.c",
 	NULL,
 };
 

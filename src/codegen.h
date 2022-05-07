@@ -7,28 +7,37 @@
 struct cg_func; typedef struct cg_func cg_func_t;
 struct cg_block; typedef struct cg_block cg_block_t;
 
-
-#define OPCODE_LIST \
-	X(mov, 
+#include "x64/instructions.h"
 
 
+
+/*
+R = symbol is read
+W = symbol is written
+RW = symbol is read and written
+I = informational symbol
+N = not a symbol
+*/
+//            |  is symbol?  |
+//   type       ret,  l,  r     
 #define TACI_TYPE_LIST \
-	X(add) \
-	X(call) \
-	X(fn_arg) \
-	X(fn_call) \
-	X(fn_call_conv) \
-	X(jmp) \
-	X(landing) \
-	X(load) \
-	X(move) \
-	X(nop) \
-	X(return) \
-	X(return_val) \
-	X(set) \
+	X(add,        W, R, R) \
+	X(accum,      W, R, N) \
+	X(call,       R, N, N) \
+	X(fn_arg,     R, N, N) \
+	X(fn_call,    R, N, N) \
+	X(fn_call_conv, N, N, N) \
+	X(jmp,        N, N, N) \
+	X(landing,    N, N, N) \
+	X(load,       W, N, N) \
+	X(move,       W, R, N) \
+	X(nop,        N, N, N) \
+	X(return,     N, N, N) \
+	X(return_val, R, N, N) \
+	X(set,        W, N, N) \
 
 
-#define X(x) TACI_TYPE_##x,
+#define X(x, a,b,c) TACI_TYPE_##x,
 enum {
 	TACI_TYPE_NONE = 0,
 TACI_TYPE_LIST
@@ -60,6 +69,19 @@ typedef struct x64_instr {
 } x64_instr_t;
 
 
+// the pseudo-assembly memory targets are still symbol references
+typedef struct pseudo_x64 {
+	uint16_t op_id; // more or less the text name in assembly
+	uint8_t src_type; // c=concrete register, r=temp register, s=symbol, m=deref of a register, i=immediate
+	uint8_t dst_type; // c=concrete register, r=temp register, s=symbol, m=deref of a register
+	uint8_t src_sz : 4; // operand width in powers of 2; 0 = 1B, 1 = 2B, 2 = 4B, 3 = 8B, 4 = 16B, 5 = 32B, ... 
+	uint8_t dst_sz : 4; // operand width in powers of 2
+	uint8_t immed_sz : 4; // width in powers of 2
+		
+	uint64_t src, dst, immed; // register, temporary, or immediate
+} pseudo_x64_t;
+
+
 // three-address code instruction
 typedef struct taci {
 	int type;
@@ -68,16 +90,25 @@ typedef struct taci {
 } taci_t;
 
 typedef struct taci_block {
-	VEC(taci_t*) tacis;
+	VEC(taci_t) tacis;
+	ast_scope_info_t* scope;
 } taci_block_t;
 
 
+typedef struct temp_name {
+	int assignment, last_ref; // indices into the taci block
+	int symbol;
+} temp_name_t;
 
 
 typedef struct cg_func {
 	char* name;
 	taci_block_t* code;
 	VEC(x64_instr_t) asmcode;
+	
+	VEC(temp_name_t) temps;
+	
+	taci_block_t* final_tacis;
 	
 	ast_func_t* source_tree;
 } cg_func_t;
@@ -105,7 +136,28 @@ typedef struct {
 
 
 cg_tu_t* cg_linearize_tu(codegen_ctx_t* ctx, ast_tu_t* atu);
-void taci_to_x64(codegen_ctx_t* ctx, cg_func_t* fn);
+void taci_to_pseudo_x64(codegen_ctx_t* ctx, cg_func_t* fn);
+
+
+void linearize_basic_blocks(codegen_ctx_t* ctx, cg_func_t* fn);
+
+
+
+typedef struct reg_alloc_info {
+	struct  {
+		
+	} gpregs[16];
+	
+} reg_alloc_info_t;
+
+
+
+
+
+
+
+
+
 
 
 #endif __InfernalC__codegen_h__ 

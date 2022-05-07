@@ -70,9 +70,12 @@ typedef struct symbol {
 	
 	unsigned int flags;
 	int scope_id;
+	
+	// register allocation info
+	int first_ref, last_ref;
 
 	char* name;
-	
+
 	union {
 		double d;
 		float f;
@@ -103,6 +106,8 @@ typedef struct symbol_table {
 	VEC(ast_scope_info_t) scopes;
 } symbol_table_t;
 
+symbol_t* get_symbol(symbol_table_t* t, int id);
+ast_name_info_t* get_scoped_symbol_info(ast_scope_info_t* si, int id);
 
 
 
@@ -172,7 +177,7 @@ typedef struct ast_stmt {
 } ast_stmt_t;
 
 typedef struct ast_block {
-	ast_scope_info_t* locals;
+	ast_scope_info_t* scope;
 	
 	VEC(ast_stmt_t*) statements;
 } ast_block_t;

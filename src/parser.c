@@ -33,7 +33,6 @@ int _DEBUG_parse_lvl = 0;
 #define PARSE_DEBUG_END(...) do{_DEBUG_parse_lvl-=2;}while(0);
 
 int find_sym_id(ast_scope_info_t* si, char* name);
-symbol_t* get_symbol(ast_scope_info_t* si, int id);
 symbol_t* insert_symbol(parser_ctx_t* ctx, char* name);
 symbol_t* imply_symbol(parser_ctx_t* ctx, char* name);
 
@@ -449,6 +448,7 @@ ast_block_t* parse_block(parser_ctx_t* ctx) { PARSE_DEBUG_START();
 	
 	// set up a new scope
 	push_scope(ctx);
+	b->scope = ctx->cur_scope;
 		
 	// parse list of statements
 	do {
@@ -1259,8 +1259,16 @@ int find_sym_id(ast_scope_info_t* si, char* name) {
 	return find_sym_id(si->parent, name);
 }
 
-symbol_t* get_symbol(ast_scope_info_t* si, int id) {
-	return &VEC_ITEM(&si->table->symbols, id);
+symbol_t* get_symbol(symbol_table_t* t, int id) {
+	return &VEC_ITEM(&t->symbols, id);
+}
+
+ast_name_info_t* get_scoped_symbol_info(ast_scope_info_t* si, int id) {
+	VEC_EACHP(&si->name_lookup, i, ni) {
+		if(ni->symbol_id == id) return ni;
+	}
+	
+	return NULL;
 }
 
 symbol_t* insert_symbol(parser_ctx_t* ctx, char* name) {
@@ -1294,7 +1302,7 @@ symbol_t* imply_symbol(parser_ctx_t* ctx, char* name) {
 //		printf("creating unbound symbol [%d]%s\n", id, s->name);
 	}
 	else {
-		s = get_symbol(ctx->cur_scope, id);
+		s = get_symbol(ctx->symtab, id);
 //		printf("found implied symbol [%d]%s\n", id, s->name);
 	}
 	

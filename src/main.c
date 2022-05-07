@@ -41,6 +41,7 @@ int main(int argc, char* argv[]) {
 	parse_root(&ctx);
 	
 	codegen_ctx_t* cgctx = calloc(1, sizeof(*cgctx));
+	cgctx->symtab = ctx.symtab;
 	
 	cg_linearize_tu(cgctx, ctx.tu);
 	

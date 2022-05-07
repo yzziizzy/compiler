@@ -648,6 +648,8 @@ int main(int argc, char* argv[]) {
 	
 	fprintf(dotc, "// DO NOT EDIT: This file generated from insns.dat, originally\n//   sourced from the NASM project then modified.\n\n// This file specifically is in the Public Domain\n\n\n");
 	
+	fprintf(dotc, "#include \"instructions.h\"\n\n");
+	
 	fprintf(doth, "#ifndef __x64_instructions_h__\n#define __x64_instructions_h__\n\n");
 	fprintf(doth, "// DO NOT EDIT: This file generated from insns.dat, originally\n//   sourced from the NASM project then modified.\n\n// This file specifically is in the Public Domain\n\n\n");
 	
@@ -672,7 +674,7 @@ int main(int argc, char* argv[]) {
 	
 	// instruction group structures
 	VEC_EACH(&list, j, g) {
-		fprintf(dotc, "static struct instruction instruction_group_%s_[%ld] = {\n", g->name, VEC_LEN(&g->instructions));
+		fprintf(dotc, "static struct instruction instruction_group_%s_[%ld] = {\n", g->name, VEC_LEN(&g->instructions) + 1);
 		
 		VEC_EACHP(&g->instructions, k, i) {
 			
@@ -702,17 +704,14 @@ int main(int argc, char* argv[]) {
 	
 	
 	fprintf(doth, "struct instruction_group_index_entry {\n\tstruct instruction* table;\n\tchar* name;\n\tint group_len;\n};\n\n");
-	fprintf(doth, "extern struct instruction_group_index_entry instruction_group_index[%ld];\n\n", VEC_LEN(&list));
+	fprintf(doth, "extern struct instruction_group_index_entry instruction_group_index[%ld];\n\n", VEC_LEN(&list) + 1);
 	fprintf(doth, "struct instruction_group_index_entry* get_instruction_by_name(char* name);\n\n");
 	
-	fprintf(dotc, "struct instruction_group_index_entry instruction_group_index[%ld] = {\n", VEC_LEN(&list));
-	VEC_EACH(&list, j, g) {
-		fprintf(dotc, "\t[%d] = { .table = instruction_group_%s_, .name = \"%s\", .group_len = %ld},\n", g->name_id, g->name, g->name, VEC_LEN(&g->instructions));
-	}
+	fprintf(dotc, "struct instruction_group_index_entry instruction_group_index[%ld] = {\n", VEC_LEN(&list) + 1);
+	fprintf(dotc, "#define X(id, n, len) [id] = { .table = instruction_group_##n##_, .name = #n, .group_len = len},\n");
+	fprintf(dotc, "\tINSTRUCTION_GROUP_X_LIST\n#undef X\n");
 	fprintf(dotc, "};\n\n");
-	
-	
-	
+
 	// instruction enum and string lookup
 	
 	// static hash table
@@ -752,8 +751,14 @@ int main(int argc, char* argv[]) {
 	fprintf(dotc, "\t\ti = (i + 1) %% instruction_hash_table_size;\n");
 	fprintf(dotc, "\t} while(i != start);\n");
 	fprintf(dotc, "\t\n");
-	fprintf(dotc, "\treturn NULL;\n");
+	fprintf(dotc, "\treturn 0;\n");
 	fprintf(dotc, "}\n\n\n");
+	
+	
+	fprintf(doth, "#define INSTRUCTION_GROUP_X_LIST \\\n");
+	VEC_EACH(&list, j, g) {
+		fprintf(doth, "\tX(%d, %s, %ld) \\\n", g->name_id, g->name, VEC_LEN(&g->instructions));
+	}
 	
 	
 	fprintf(doth, "\n\n\n#endif // __x64_instructions_h__");
